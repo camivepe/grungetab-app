@@ -1,0 +1,240 @@
+/* ── RESET & BASE ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* ── DARK THEME (default) ── */
+body.dark {
+  background-color: #1a1a1a;
+  color: #e8e8e8;
+  --controls-bg: rgba(20, 20, 20, 0.92);
+  --controls-border: rgba(255, 255, 255, 0.08);
+  --btn-bg: rgba(255, 255, 255, 0.1);
+  --btn-hover: rgba(255, 255, 255, 0.18);
+  --btn-color: #e8e8e8;
+  --meta-color: #888;
+  --pre-color: #c8e6c9;
+  --slider-track: #444;
+  --slider-thumb: #7cb87e;
+  --title-color: #7cb87e;
+}
+
+/* ── LIGHT THEME ── */
+body.light {
+  background-color: #f5f5f0;
+  color: #1a1a1a;
+  --controls-bg: rgba(245, 245, 240, 0.94);
+  --controls-border: rgba(0, 0, 0, 0.1);
+  --btn-bg: rgba(0, 0, 0, 0.07);
+  --btn-hover: rgba(0, 0, 0, 0.13);
+  --btn-color: #1a1a1a;
+  --meta-color: #666;
+  --pre-color: #2a5c2a;
+  --slider-track: #ccc;
+  --slider-thumb: #4a8c4a;
+  --title-color: #3a7a3a;
+}
+
+/* ── TAB CONTAINER (el que hace scroll) ── */
+#tab-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: scroll;
+  overflow-x: auto;
+  padding: 72px 16px 80px;
+  /* Scrollbar siempre visible */
+  scrollbar-width: thin;
+  scrollbar-color: #555 transparent;
+}
+
+#tab-container::-webkit-scrollbar {
+  width: 4px;
+}
+#tab-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+#tab-container::-webkit-scrollbar-thumb {
+  background-color: #555;
+  border-radius: 2px;
+}
+
+#tab-content {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+#tab-content h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--title-color);
+}
+
+#tab-content .meta {
+  font-size: 0.82rem;
+  color: var(--meta-color);
+  margin-bottom: 24px;
+}
+
+#tab-content pre {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--pre-color);
+  white-space: pre;
+  overflow-x: auto;
+  padding-bottom: 120px;
+}
+
+/* ── CONTROLS OVERLAY ── */
+#controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: opacity 0.4s;
+}
+
+#controls.hidden {
+  opacity: 0;
+}
+
+/* ── TOP BAR ── */
+#controls-top {
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  background: var(--controls-bg);
+  border-bottom: 0.5px solid var(--controls-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+#song-title {
+  font-size: 0.88rem;
+  font-weight: 500;
+  opacity: 0.85;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 12px;
+}
+
+#top-buttons {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── BOTTOM BAR ── */
+#controls-bottom {
+  pointer-events: all;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 20px;
+  background: var(--controls-bg);
+  border-top: 0.5px solid var(--controls-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* ── BUTTONS ── */
+button {
+  background: var(--btn-bg);
+  color: var(--btn-color);
+  border: 0.5px solid var(--controls-border);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:hover, button:active {
+  background: var(--btn-hover);
+}
+
+#btn-play {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+#btn-theme, #btn-top {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── SPEED SLIDER ── */
+#speed-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+}
+
+#speed-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--slider-track);
+  border-radius: 2px;
+  outline: none;
+}
+
+#speed-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--slider-thumb);
+  cursor: pointer;
+}
+
+#speed-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  min-width: 72px;
+  text-align: right;
+  opacity: 0.7;
+}
+
+/* ── SAFE AREA (iPhone notch) ── */
+#controls-top {
+  padding-top: max(14px, env(safe-area-inset-top));
+}
+#controls-bottom {
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
