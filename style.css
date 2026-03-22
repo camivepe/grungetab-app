@@ -126,10 +126,7 @@ body.light {
 /* ─────────────────────────────────────────
    PANTALLA: LISTA
 ───────────────────────────────────────── */
-#screen-list {
-  display: flex;
-  flex-direction: column;
-}
+/* display:flex y flex-direction:column ya vienen de .screen */
 
 #list-header {
   display: flex;
@@ -256,6 +253,10 @@ body.light {
   flex-shrink: 0;
 }
 
+.folder-item .doc-name {
+  font-weight: 600;
+}
+
 /* ─────────────────────────────────────────
    PANTALLA: LECTOR
 ───────────────────────────────────────── */
@@ -279,6 +280,7 @@ body.light {
 #tab-content {
   max-width: 700px;
   margin: 0 auto;
+  --doc-font-size: 0.88rem; /* controlado por JS vía applyFontSize */
 }
 
 /* Texto plano (Fase 1 fallback) */
@@ -295,7 +297,7 @@ body.light {
 /* Contenido renderizado desde Google Docs */
 #tab-content .doc-rendered {
   font-family: 'Courier New', Courier, monospace;
-  font-size: 0.88rem;
+  font-size: var(--doc-font-size);
   line-height: 1.6;
   padding-bottom: 120px;
 }
@@ -408,7 +410,7 @@ button:hover, button:active {
 }
 
 #btn-theme, #btn-top, #btn-back,
-#btn-list-theme, #btn-logout {
+#btn-list-theme, #btn-logout, #btn-list-back, #btn-wrap {
   width: 40px;
   height: 40px;
   padding: 0;
@@ -452,4 +454,56 @@ button:hover, button:active {
   min-width: 72px;
   text-align: right;
   opacity: 0.7;
+}
+
+/* ── VIEW OPTIONS ── */
+#view-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+}
+
+#font-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--slider-track);
+  border-radius: 2px;
+  outline: none;
+}
+
+#font-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--slider-thumb);
+  cursor: pointer;
+}
+
+#font-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  min-width: 24px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+#btn-wrap {
+  opacity: 0.55;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+#btn-wrap.active {
+  opacity: 1;
+  background: var(--btn-hover);
+}
+
+/* ── NO-WRAP MODE ── */
+#tab-content.no-wrap .doc-rendered p,
+#tab-content.no-wrap .doc-rendered span {
+  white-space: pre;
 }

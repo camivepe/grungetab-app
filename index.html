@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="GrungeTab" />
@@ -11,6 +12,13 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="stylesheet" href="style.css" />
   <title>GrungeTab</title>
+  <script>
+    window.GRUNGETAB_CONFIG = {
+      clientId:     '__GOOGLE_CLIENT_ID__',
+      allowedEmail: '__ALLOWED_EMAIL__',
+      tabsFolderId: '__TABS_FOLDER_ID__',
+    };
+  </script>
 </head>
 <body class="dark">
 
@@ -41,6 +49,7 @@
 <!-- ── PANTALLA: LISTA DE DOCS ── -->
 <div id="screen-list" class="screen hidden">
   <div id="list-header">
+    <button id="btn-list-back" class="hidden" title="Volver">←</button>
     <span id="list-title">GrungeTab</span>
     <div id="list-header-buttons">
       <button id="btn-list-theme" title="Toggle tema">☀️</button>
@@ -73,6 +82,7 @@
       <button id="btn-back" title="Volver a la lista">←</button>
       <span id="song-title">—</span>
       <div id="top-buttons">
+        <button id="btn-wrap" title="Ajuste de línea">↵</button>
         <button id="btn-theme" title="Toggle tema">☀️</button>
         <button id="btn-top" title="Volver al inicio">⬆</button>
       </div>
@@ -85,6 +95,11 @@
         <input type="range" id="speed-slider" min="1" max="4" value="2" step="1" />
         <span>🐇</span>
         <span id="speed-label">Normal</span>
+      </div>
+      <div id="view-options">
+        <span>🔤</span>
+        <input type="range" id="font-slider" min="1" max="4" value="2" step="1" />
+        <span id="font-label">M</span>
       </div>
     </div>
   </div>

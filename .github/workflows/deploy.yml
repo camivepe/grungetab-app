@@ -23,17 +23,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Inject Client ID
+      - name: Inject secrets
         run: |
           sed -i "s|__GOOGLE_CLIENT_ID__|${{ secrets.GOOGLE_CLIENT_ID }}|g" index.html
+          sed -i "s|__ALLOWED_EMAIL__|${{ secrets.ALLOWED_EMAIL }}|g" index.html
+          sed -i "s|__TABS_FOLDER_ID__|${{ secrets.TABS_FOLDER_ID }}|g" index.html
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: '.'
 
