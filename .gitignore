@@ -9,3 +9,10 @@ yarn-error.log*
 .pnp.js
 
 .vscode/*
+
+# Configuración local (nunca subir a GitHub)
+.env.local
+dev.sh
+
+# Archivo generado por dev.sh (nunca subir a GitHub)
+index.local.html
