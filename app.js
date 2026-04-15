@@ -148,21 +148,41 @@ function showLoginError(msg) {
   document.getElementById('login-btn-wrapper').after(el);
 }
 
-function initOAuthClient() {
-  const client = google.accounts.oauth2.initTokenClient({
+function initOAuthClient(silent = false) {
+  const onToken = (tokenResponse) => {
+    if (tokenResponse.error) {
+      if (silent) {
+        // Sesión expirada o permisos revocados → volver al login
+        localStorage.removeItem('grungetab-authed');
+        showScreen('login');
+      } else {
+        console.error('OAuth error:', tokenResponse.error);
+      }
+      return;
+    }
+    localStorage.setItem('grungetab-authed', '1');
+    state.accessToken = tokenResponse.access_token;
+    state.folderStack = [];
+    showScreen('list');
+    loadFolder(CONFIG.tabsFolderId, 'GrungeTab');
+  };
+
+  const config = {
     client_id: CONFIG.clientId,
     scope: SCOPES,
-    callback: (tokenResponse) => {
-      if (tokenResponse.error) {
-        console.error('OAuth error:', tokenResponse.error);
-        return;
-      }
-      state.accessToken = tokenResponse.access_token;
-      state.folderStack = [];
-      showScreen('list');
-      loadFolder(CONFIG.tabsFolderId, 'GrungeTab');
-    },
-  });
+    callback: onToken,
+  };
+  // prompt: '' = solicitar token sin popup si ya se otorgó consentimiento.
+  // Sin esto Google siempre muestra el selector de cuenta aunque ya haya sesión.
+  if (silent) {
+    config.prompt = '';
+    config.error_callback = () => {
+      localStorage.removeItem('grungetab-authed');
+      showScreen('login');
+    };
+  }
+
+  const client = google.accounts.oauth2.initTokenClient(config);
   client.requestAccessToken();
 }
 
@@ -173,6 +193,7 @@ function logout() {
   state.folderStack = [];
   docList.innerHTML = '<div id="list-loading">Cargando documentos...</div>';
   searchInput.value = '';
+  localStorage.removeItem('grungetab-authed');
   pause();
   showScreen('login');
   if (token) google.accounts.oauth2.revoke(token);
@@ -316,8 +337,11 @@ function renderParagraph(para) {
       }
     }
   }
-  // Saltos de línea suaves (Shift+Enter en Google Docs) → <br> explícito
+  // Saltos de línea suaves (Shift+Enter en Google Docs) → <br> explícito.
+  // El último textRun de cada párrafo termina con \n; lo eliminamos antes de
+  // cerrar el <p> para evitar una línea vacía extra al pie de cada párrafo.
   line = line.replace(/\n/g, '<br>');
+  line = line.replace(/<br>\s*$/, '');
 
   const style = para.paragraphStyle?.namedStyleType || '';
   if (style.startsWith('HEADING')) {
@@ -328,7 +352,11 @@ function renderParagraph(para) {
 }
 
 function renderTable(table) {
-  let html = '<table style="border-collapse:collapse;margin:8px 0;">';
+  // Las tablas de Google Docs se usan para alinear acordes sobre letras.
+  // Cada fila puede tener múltiples celdas (una por acorde/sección) que
+  // desbordarían la pantalla si no se les da scroll horizontal propio.
+  let html = '<div class="tab-table">';
+  html += '<table>';
   for (const row of (table.tableRows || [])) {
     html += '<tr>';
     for (const cell of (row.tableCells || [])) {
@@ -336,11 +364,11 @@ function renderTable(table) {
       for (const block of (cell.content || [])) {
         if (block.paragraph) cellContent += renderParagraph(block.paragraph);
       }
-      html += `<td style="border:0.5px solid rgba(128,128,128,.3);padding:4px 8px;">${cellContent}</td>`;
+      html += `<td>${cellContent}</td>`;
     }
     html += '</tr>';
   }
-  html += '</table>\n';
+  html += '</table></div>\n';
   return html;
 }
 
@@ -522,4 +550,17 @@ loadTheme();
 loadViewPrefs();
 speedLabel.textContent = SPEED_LABELS[state.speed];
 speedSlider.value = state.speed;
-showScreen('login');
+
+if (localStorage.getItem('grungetab-authed') === '1') {
+  // Hay una sesión previa: esperar a que cargue GIS e intentar token silencioso.
+  // Si falla (sesión expirada, permisos revocados) initOAuthClient(true) muestra el login.
+  (function waitForGIS() {
+    if (typeof google !== 'undefined' && google.accounts?.oauth2) {
+      initOAuthClient(true);
+    } else {
+      setTimeout(waitForGIS, 50);
+    }
+  })();
+} else {
+  showScreen('login');
+}

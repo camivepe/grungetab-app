@@ -1,6 +1,6 @@
 # GrungeTab
 
-Lector de tablaturas con scroll automático. Lee Google Docs desde una carpeta de Google Drive y permite navegar el contenido con auto-scroll a velocidad regulable. Diseñado para tocar guitarra sin tener que tocar la pantalla.
+Lector de tablaturas con scroll automático para guitarra. Lee Google Docs almacenados en Google Drive y los muestra con auto-scroll a velocidad regulable, pensado para tocar sin tener que tocar la pantalla.
 
 ---
 
@@ -106,9 +106,9 @@ Antes del primer deploy, agregar estos tres secrets en **GitHub → Settings →
 
 ## Backlog / Mejoras pendientes
 
-1- [ ] **Buscador avanzado**: buscar por nombre de archivo y también por URL o ID de Google Doc para abrirlo directamente sin navegar la carpeta
-2- [ ] **Caché local de contenido**: guardar el contenido de los docs abiertos en localStorage para una sección de "Recientes" y acceso offline
-3- [ ] **Archivos fijados (pins)**: store local para marcar/fijar archivos favoritos y acceder a ellos rápidamente desde la pantalla principal
-4- [ ] **Carga de imágenes autenticada**: las imágenes incrustadas en Google Docs fallan por CORS al cargarlas directamente — resolver via proxy o pre-fetch con token
-5- [ ] **Optimización para iPad**: explorar layout de panel lateral colapsable para poder ver la lista y el lector simultáneamente en pantallas grandes
-6- [ ] **Leer txt**: Permitir la lectura de archivos txt, revisar controles que sí apliquen para el layout o deshabilitarlos cuando no apliquen para txt.
+- [ ] **Buscador avanzado**: buscar por nombre de archivo o abrir un Google Doc directamente por URL o ID, sin navegar la carpeta
+- [ ] **Caché local de contenido**: guardar el contenido de los docs abiertos en localStorage para una sección de "Recientes" y acceso offline
+- [ ] **Archivos fijados (pins)**: marcar favoritos y acceder a ellos rápidamente desde la pantalla principal
+- [ ] **Optimización para iPad**: explorar un layout de panel lateral colapsable para ver la lista y el lector simultáneamente en pantallas grandes
+- [ ] **Recargar documento**: botón en el reader para refetchear el doc actual desde Drive sin volver a la lista
+- [ ] **Soporte para archivos .txt**: permitir la lectura de archivos de texto plano; ajustar o deshabilitar los controles que no apliquen

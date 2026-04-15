@@ -507,3 +507,30 @@ button:hover, button:active {
 #tab-content.no-wrap .doc-rendered span {
   white-space: pre;
 }
+
+/* ── TABLAS DE ACORDES ── */
+/* Google Docs usa tablas para alinear acordes sobre letras.
+   Cada fila puede ser más ancha que la pantalla → scroll horizontal por tabla. */
+.tab-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px 0;
+}
+
+.tab-table table {
+  border-collapse: collapse;
+}
+
+.tab-table td {
+  border: 0.5px solid rgba(128,128,128,.3);
+  padding: 4px 8px;
+  vertical-align: top;
+}
+
+/* Dentro de celdas: pre para preservar el spacing de acordes.
+   Usa mayor especificidad para sobreescribir el pre-wrap global. */
+#tab-content .doc-rendered .tab-table p,
+#tab-content .doc-rendered .tab-table span {
+  white-space: pre;
+  margin: 0;
+}
