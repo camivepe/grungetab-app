@@ -294,6 +294,19 @@ body.light {
   padding-bottom: 120px;
 }
 
+/* Archivos .txt leídos desde Drive */
+#tab-content .txt-rendered {
+  font-size: var(--doc-font-size);
+  line-height: 1.6;
+  color: var(--pre-color);
+  padding-bottom: 120px;
+}
+
+/* PDFs renderizados con PDF.js */
+#tab-content .pdf-rendered {
+  padding-bottom: 0; /* el último canvas ya lleva su propio margen */
+}
+
 /* Contenido renderizado desde Google Docs */
 #tab-content .doc-rendered {
   font-family: 'Courier New', Courier, monospace;
@@ -364,6 +377,18 @@ body.light #tab-content img {
   text-overflow: ellipsis;
 }
 
+#file-type-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--btn-bg);
+  border: 0.5px solid var(--controls-border);
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
 #top-buttons {
   display: flex;
   gap: 8px;
@@ -401,12 +426,43 @@ button:hover, button:active {
   background: var(--btn-hover);
 }
 
+#bottom-main {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 #btn-play {
-  width: 100%;
+  flex: 1;
   padding: 12px;
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+#btn-settings {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+#btn-settings.active {
+  background: var(--btn-hover);
+}
+
+#settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#settings-panel.hidden {
+  display: none;
 }
 
 #btn-theme, #btn-top, #btn-back,
@@ -420,39 +476,23 @@ button:hover, button:active {
   justify-content: center;
 }
 
-/* ── SPEED SLIDER ── */
+/* ── SPEED CONTROL ── */
 #speed-control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.ctrl-icon {
   font-size: 1rem;
-}
-
-#speed-slider {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: var(--slider-track);
-  border-radius: 2px;
-  outline: none;
-}
-
-#speed-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--slider-thumb);
-  cursor: pointer;
+  flex-shrink: 0;
 }
 
 #speed-label {
+  flex: 1;
   font-size: 0.82rem;
   font-weight: 500;
-  min-width: 72px;
-  text-align: right;
+  text-align: center;
   opacity: 0.7;
 }
 
@@ -460,34 +500,13 @@ button:hover, button:active {
 #view-options {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 1rem;
-}
-
-#font-slider {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: var(--slider-track);
-  border-radius: 2px;
-  outline: none;
-}
-
-#font-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--slider-thumb);
-  cursor: pointer;
+  gap: 8px;
 }
 
 #font-label {
+  flex: 1;
   font-size: 0.82rem;
   font-weight: 500;
-  min-width: 24px;
   text-align: center;
   opacity: 0.7;
 }
@@ -500,6 +519,40 @@ button:hover, button:active {
 #btn-wrap.active {
   opacity: 1;
   background: var(--btn-hover);
+}
+
+/* ── ZOOM PDF ── */
+#zoom-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 1rem;
+}
+
+#zoom-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  min-width: 44px;
+  text-align: center;
+  opacity: 0.7;
+}
+
+#btn-zoom-in,
+#btn-zoom-out,
+#btn-speed-down,
+#btn-speed-up,
+#btn-font-down,
+#btn-font-up {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.3rem;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* ── NO-WRAP MODE ── */

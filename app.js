@@ -30,6 +30,10 @@ const state = {
   fontSize: 2,   // 1–4
   noWrap: false, // false = soft-wrap, true = sin ajuste (scroll horizontal)
 
+  // PDF viewer
+  pdfDoc: null,
+  pdfScale: 1.0,
+
   // Navegación de carpetas
   allItems: [],
   folderStack: [], // [{id, name}]
@@ -62,12 +66,21 @@ const btnBack      = document.getElementById('btn-back');
 const btnTheme     = document.getElementById('btn-theme');
 const btnListTheme = document.getElementById('btn-list-theme');
 const btnLogout    = document.getElementById('btn-logout');
-const speedSlider  = document.getElementById('speed-slider');
-const speedLabel   = document.getElementById('speed-label');
-const songTitle    = document.getElementById('song-title');
-const fontSlider   = document.getElementById('font-slider');
-const fontLabel    = document.getElementById('font-label');
-const btnWrap      = document.getElementById('btn-wrap');
+const speedLabel     = document.getElementById('speed-label');
+const songTitle      = document.getElementById('song-title');
+const fileTypeBadge  = document.getElementById('file-type-badge');
+const fontLabel      = document.getElementById('font-label');
+const btnWrap        = document.getElementById('btn-wrap');
+const btnSettings    = document.getElementById('btn-settings');
+const settingsPanel  = document.getElementById('settings-panel');
+const btnSpeedDown   = document.getElementById('btn-speed-down');
+const btnSpeedUp     = document.getElementById('btn-speed-up');
+const btnFontDown    = document.getElementById('btn-font-down');
+const btnFontUp      = document.getElementById('btn-font-up');
+const zoomControl    = document.getElementById('zoom-control');
+const zoomLabel      = document.getElementById('zoom-label');
+const btnZoomIn      = document.getElementById('btn-zoom-in');
+const btnZoomOut     = document.getElementById('btn-zoom-out');
 
 // ── Navegación entre pantallas ────────────────────────────────────────────────
 function showScreen(name) {
@@ -103,7 +116,6 @@ function loadTheme() {
 function applyFontSize(level) {
   state.fontSize = level;
   tabContent.style.setProperty('--doc-font-size', FONT_SIZES[level] + 'rem');
-  fontSlider.value = level;
   fontLabel.textContent = FONT_LABELS[level];
   localStorage.setItem('grungetab-fontsize', level);
 }
@@ -212,7 +224,7 @@ async function loadFolder(folderId, folderName) {
 
     do {
       const params = new URLSearchParams({
-        q: `'${folderId}' in parents and trashed=false and (mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.folder')`,
+        q: `'${folderId}' in parents and trashed=false and (mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.folder' or mimeType='text/plain' or mimeType='application/pdf')`,
         fields: 'nextPageToken, files(id, name, mimeType, modifiedTime)',
         orderBy: 'name',
         pageSize: 100,
@@ -264,7 +276,10 @@ function renderItems(items) {
 
   docList.innerHTML = items.map(item => {
     const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
-    const icon = isFolder ? '📁' : '📄';
+    const isTxt    = item.mimeType === 'text/plain';
+    const isPdf    = item.mimeType === 'application/pdf';
+    const icon = isFolder ? '📁' : isTxt ? '🎸' : isPdf ? '📕' : '📄';
+    const type = isFolder ? 'folder' : isTxt ? 'txt' : isPdf ? 'pdf' : 'doc';
     const date = new Date(item.modifiedTime).toLocaleDateString('es-AR', {
       day: '2-digit', month: 'short', year: 'numeric',
     });
@@ -273,7 +288,7 @@ function renderItems(items) {
       <div class="doc-item${isFolder ? ' folder-item' : ''}"
            data-id="${item.id}"
            data-name="${escapeHtml(item.name)}"
-           data-type="${isFolder ? 'folder' : 'doc'}">
+           data-type="${type}">
         <span class="doc-icon">${icon}</span>
         <div class="doc-info">
           <div class="doc-name">${escapeHtml(item.name)}</div>
@@ -288,6 +303,10 @@ function renderItems(items) {
     el.addEventListener('click', () => {
       if (el.dataset.type === 'folder') {
         navigateInto({ id: el.dataset.id, name: el.dataset.name });
+      } else if (el.dataset.type === 'txt') {
+        openTxt(el.dataset.id, el.dataset.name);
+      } else if (el.dataset.type === 'pdf') {
+        openPdf(el.dataset.id, el.dataset.name);
       } else {
         openDoc(el.dataset.id, el.dataset.name);
       }
@@ -331,8 +350,12 @@ function renderParagraph(para) {
       const obj   = doc_current?.inlineObjects?.[objId];
       if (obj) {
         const props = obj.inlineObjectProperties?.embeddedObject;
-        if (props?.imageProperties?.contentUri) {
-          line += `<img src="${props.imageProperties.contentUri}" alt="imagen" />`;
+        // contentUri = imagen hosteada por Google (requiere auth).
+        // sourceUri  = URL original de donde se insertó (pública, no necesita auth).
+        const src = props?.imageProperties?.contentUri
+                 || props?.imageProperties?.sourceUri;
+        if (src) {
+          line += `<img src="${src}" alt="imagen" data-original-src="${src}" />`;
         }
       }
     }
@@ -375,8 +398,10 @@ function renderTable(table) {
 let doc_current = null;
 
 async function openDoc(docId, docName) {
-  songTitle.textContent = docName;
-  tabContent.innerHTML  = '<p style="padding:16px;opacity:.5">Cargando...</p>';
+  songTitle.textContent     = docName;
+  fileTypeBadge.textContent = 'DOC';
+  tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
+  setFileTypeControls('doc');
   showScreen('reader');
   container.scrollTop = 0;
   pause();
@@ -391,23 +416,137 @@ async function openDoc(docId, docName) {
   }
 }
 
-// ── Imágenes autenticadas (fix CORS) ─────────────────────────────────────────
-// Las imágenes de Google Docs requieren el token para cargarse.
-// Las obtenemos con fetch autenticado y las reemplazamos por blob URLs.
-async function resolveAuthImages(container) {
-  const imgs = container.querySelectorAll('img[src]');
-  await Promise.allSettled(Array.from(imgs).map(async (img) => {
-    try {
-      const res = await fetch(img.src, {
-        headers: { Authorization: `Bearer ${state.accessToken}` },
-      });
-      if (!res.ok) { img.style.display = 'none'; return; }
-      const blob = await res.blob();
-      img.src = URL.createObjectURL(blob);
-    } catch {
-      img.style.display = 'none';
-    }
-  }));
+async function openTxt(fileId, fileName) {
+  songTitle.textContent     = fileName;
+  fileTypeBadge.textContent = 'TXT';
+  tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
+  setFileTypeControls('txt');
+  showScreen('reader');
+  container.scrollTop = 0;
+  pause();
+
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${state.accessToken}` } }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
+  } catch (err) {
+    tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el archivo.<br><small>${err.message}</small></p>`;
+  }
+}
+
+// ── PDF viewer ────────────────────────────────────────────────────────────────
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('No se pudo cargar PDF.js'));
+    document.head.appendChild(script);
+  });
+}
+
+// Muestra u oculta controles según el tipo de archivo abierto
+function setFileTypeControls(type) {
+  const isPdf = type === 'pdf';
+  zoomControl.classList.toggle('hidden', !isPdf);
+  btnWrap.classList.toggle('hidden', isPdf);
+}
+
+function updateZoomLabel() {
+  zoomLabel.textContent = Math.round(state.pdfScale * 100) + '%';
+}
+
+// Renderiza todas las páginas del PDF almacenado en state.pdfDoc
+async function renderPdfPages() {
+  const pdf = state.pdfDoc;
+  const prevScrollTop = container.scrollTop;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'pdf-rendered';
+  tabContent.innerHTML = '';
+  tabContent.appendChild(wrapper);
+
+  const baseW = tabContent.clientWidth || (container.clientWidth - 32);
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page      = await pdf.getPage(pageNum);
+    const naturalVp = page.getViewport({ scale: 1 });
+    const scale     = (baseW / naturalVp.width) * state.pdfScale;
+    const viewport  = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    // Ancho fijo en px para que el zoom > 1 desborde y genere scroll horizontal
+    canvas.style.cssText = `width:${viewport.width}px;max-width:none;display:block;margin-bottom:${pageNum < pdf.numPages ? '8' : '120'}px;`;
+
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    wrapper.appendChild(canvas);
+  }
+
+  container.scrollTop = prevScrollTop;
+}
+
+async function setPdfZoom(delta) {
+  if (!state.pdfDoc) return;
+  state.pdfScale = Math.max(0.5, Math.min(3.0, state.pdfScale + delta));
+  updateZoomLabel();
+  await renderPdfPages();
+}
+
+async function openPdf(fileId, fileName) {
+  songTitle.textContent     = fileName;
+  fileTypeBadge.textContent = 'PDF';
+  tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando PDF...</p>';
+  showScreen('reader');
+  container.scrollTop = 0;
+  pause();
+  setFileTypeControls('pdf');
+  state.pdfScale = 1.0;
+  updateZoomLabel();
+
+  try {
+    await loadPdfJs();
+
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${state.accessToken}` } }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.arrayBuffer();
+
+    state.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+    await renderPdfPages();
+  } catch (err) {
+    state.pdfDoc = null;
+    tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el PDF.<br><small>${err.message}</small></p>`;
+  }
+}
+
+// ── Imágenes de Google Docs ───────────────────────────────────────────────────
+// Los contentUri de la Docs API ya llevan autenticación en el parámetro ?key=,
+// por lo que los <img> los cargan directamente sin fetch adicional.
+// fetch() con Authorization header falla por CORS en lh*.googleusercontent.com.
+// Si la imagen no carga por onerror, intentamos agregar el access_token como
+// query param (último recurso para URLs que requieran auth explícita).
+function resolveAuthImages(container) {
+  container.querySelectorAll('img[data-original-src]').forEach(img => {
+    img.onerror = () => {
+      const url = new URL(img.dataset.originalSrc);
+      url.searchParams.set('access_token', state.accessToken);
+      img.onerror = null; // evitar loop infinito
+      img.src = url.toString();
+    };
+  });
 }
 
 // ── Helper: fetch autenticado ─────────────────────────────────────────────────
@@ -461,10 +600,21 @@ function scrollStep(timestamp) {
   state.rafId = requestAnimationFrame(scrollStep);
 }
 
+function changeSpeed(delta) {
+  state.speed = Math.max(1, Math.min(4, state.speed + delta));
+  speedLabel.textContent = SPEED_LABELS[state.speed];
+  state.lastTimestamp = null;
+  state.scrollAccum = 0;
+  showControls();
+  scheduleHide();
+}
+
 function play() {
   state.playing = true;
   state.lastTimestamp = null;
   btnPlay.textContent = '⏸ Pausar';
+  settingsPanel.classList.add('hidden');
+  btnSettings.classList.remove('active');
   state.rafId = requestAnimationFrame(scrollStep);
   scheduleHide();
 }
@@ -504,10 +654,17 @@ btnTheme.addEventListener('click',    (e) => { e.stopPropagation(); toggleTheme(
 btnListTheme.addEventListener('click',(e) => { e.stopPropagation(); toggleTheme(); });
 btnLogout.addEventListener('click',   (e) => { e.stopPropagation(); logout(); });
 btnListBack.addEventListener('click', (e) => { e.stopPropagation(); navigateUp(); });
-btnWrap.addEventListener('click',     (e) => { e.stopPropagation(); applyWrap(!state.noWrap); showControls(); scheduleHide(); });
-
-fontSlider.addEventListener('input', () => {
-  applyFontSize(parseInt(fontSlider.value, 10));
+btnWrap.addEventListener('click',      (e) => { e.stopPropagation(); applyWrap(!state.noWrap); showControls(); scheduleHide(); });
+btnZoomIn.addEventListener('click',    (e) => { e.stopPropagation(); setPdfZoom(+0.25); showControls(); scheduleHide(); });
+btnZoomOut.addEventListener('click',   (e) => { e.stopPropagation(); setPdfZoom(-0.25); showControls(); scheduleHide(); });
+btnSpeedDown.addEventListener('click', (e) => { e.stopPropagation(); changeSpeed(-1); });
+btnSpeedUp.addEventListener('click',   (e) => { e.stopPropagation(); changeSpeed(+1); });
+btnFontDown.addEventListener('click',  (e) => { e.stopPropagation(); applyFontSize(Math.max(1, state.fontSize - 1)); showControls(); scheduleHide(); });
+btnFontUp.addEventListener('click',    (e) => { e.stopPropagation(); applyFontSize(Math.min(4, state.fontSize + 1)); showControls(); scheduleHide(); });
+btnSettings.addEventListener('click',  (e) => {
+  e.stopPropagation();
+  const open = settingsPanel.classList.toggle('hidden') === false;
+  btnSettings.classList.toggle('active', open);
   showControls();
   scheduleHide();
 });
@@ -519,15 +676,6 @@ container.addEventListener('click', () => {
   } else {
     togglePlay();
   }
-});
-
-speedSlider.addEventListener('input', () => {
-  state.speed = parseInt(speedSlider.value, 10);
-  speedLabel.textContent = SPEED_LABELS[state.speed];
-  state.lastTimestamp = null;
-  state.scrollAccum = 0;
-  showControls();
-  scheduleHide();
 });
 
 document.addEventListener('touchstart', () => {
@@ -549,7 +697,6 @@ if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
 loadTheme();
 loadViewPrefs();
 speedLabel.textContent = SPEED_LABELS[state.speed];
-speedSlider.value = state.speed;
 
 if (localStorage.getItem('grungetab-authed') === '1') {
   // Hay una sesión previa: esperar a que cargue GIS e intentar token silencioso.
