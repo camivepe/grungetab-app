@@ -12,6 +12,8 @@ const SCOPES = [
 const FONT_SIZES   = { 1: 0.78, 2: 0.88, 3: 1.05, 4: 1.25 };
 const FONT_LABELS  = { 1: 'S',  2: 'M',  3: 'L',  4: 'XL' };
 
+const RECENTS_MAX = 10;
+
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
   // Auth
@@ -132,6 +134,31 @@ function loadViewPrefs() {
   const size = parseInt(localStorage.getItem('grungetab-fontsize'), 10);
   applyFontSize(size >= 1 && size <= 4 ? size : 2);
   applyWrap(localStorage.getItem('grungetab-nowrap') === '1');
+}
+
+// ── Recientes y Fijados ───────────────────────────────────────────────────────
+function loadRecents() {
+  try { return JSON.parse(localStorage.getItem('grungetab-recents') || '[]'); }
+  catch { return []; }
+}
+function saveRecents(arr) { localStorage.setItem('grungetab-recents', JSON.stringify(arr)); }
+function addRecent(item) {
+  const r = loadRecents().filter(x => x.id !== item.id);
+  r.unshift(item);
+  saveRecents(r.slice(0, RECENTS_MAX));
+}
+
+function loadPins() {
+  try { return JSON.parse(localStorage.getItem('grungetab-pins') || '[]'); }
+  catch { return []; }
+}
+function savePins(arr) { localStorage.setItem('grungetab-pins', JSON.stringify(arr)); }
+function togglePin(item) {
+  const pins = loadPins();
+  const idx  = pins.findIndex(p => p.id === item.id);
+  if (idx >= 0) pins.splice(idx, 1);
+  else pins.push(item);
+  savePins(pins);
 }
 
 // ── Auth: Google Identity Services ────────────────────────────────────────────
@@ -268,38 +295,92 @@ function navigateUp() {
   loadFolder(parent.id, parent.name);
 }
 
-function renderItems(items) {
-  if (items.length === 0) {
-    docList.innerHTML = '<div id="list-loading">Carpeta vacía.</div>';
-    return;
-  }
+function renderQuickAccess(pinIds) {
+  if (searchInput.value.trim()) return '';
 
-  docList.innerHTML = items.map(item => {
-    const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
-    const isTxt    = item.mimeType === 'text/plain';
-    const isPdf    = item.mimeType === 'application/pdf';
-    const icon = isFolder ? '📁' : isTxt ? '🎸' : isPdf ? '📕' : '📄';
-    const type = isFolder ? 'folder' : isTxt ? 'txt' : isPdf ? 'pdf' : 'doc';
-    const date = new Date(item.modifiedTime).toLocaleDateString('es-AR', {
-      day: '2-digit', month: 'short', year: 'numeric',
-    });
-    const meta = isFolder ? '' : `<div class="doc-date">Modificado: ${date}</div>`;
+  const pins    = loadPins();
+  const recents = loadRecents();
+  if (pins.length === 0 && recents.length === 0) return '';
+
+  const icons = { doc: '📄', txt: '🎸', pdf: '📕' };
+  const itemHtml = (item) => {
+    const pinned = pinIds.has(item.id);
     return `
-      <div class="doc-item${isFolder ? ' folder-item' : ''}"
+      <div class="doc-item quick-item"
            data-id="${item.id}"
            data-name="${escapeHtml(item.name)}"
-           data-type="${type}">
-        <span class="doc-icon">${icon}</span>
-        <div class="doc-info">
-          <div class="doc-name">${escapeHtml(item.name)}</div>
-          ${meta}
-        </div>
+           data-type="${item.type}">
+        <span class="doc-icon">${icons[item.type] || '📄'}</span>
+        <div class="doc-info"><div class="doc-name">${escapeHtml(item.name)}</div></div>
+        <button class="btn-pin${pinned ? ' pinned' : ''}"
+                data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${item.type}"
+                title="${pinned ? 'Quitar pin' : 'Fijar'}">📌</button>
         <span class="doc-arrow">›</span>
-      </div>
-    `;
-  }).join('');
+      </div>`;
+  };
+
+  let html = '';
+  if (pins.length > 0) {
+    html += `<div class="quick-section"><div class="quick-section-header">Fijados</div>${pins.map(itemHtml).join('')}</div>`;
+  }
+  if (recents.length > 0) {
+    html += `<div class="quick-section"><div class="quick-section-header">Recientes</div>${recents.map(itemHtml).join('')}</div>`;
+  }
+  return html;
+}
+
+function renderItems(items) {
+  const pins   = loadPins();
+  const pinIds = new Set(pins.map(p => p.id));
+
+  let html = renderQuickAccess(pinIds);
+
+  if (items.length === 0) {
+    if (!html) {
+      docList.innerHTML = '<div id="list-loading">Carpeta vacía.</div>';
+      return;
+    }
+    docList.innerHTML = html;
+  } else {
+    html += items.map(item => {
+      const isFolder = item.mimeType === 'application/vnd.google-apps.folder';
+      const isTxt    = item.mimeType === 'text/plain';
+      const isPdf    = item.mimeType === 'application/pdf';
+      const icon = isFolder ? '📁' : isTxt ? '🎸' : isPdf ? '📕' : '📄';
+      const type = isFolder ? 'folder' : isTxt ? 'txt' : isPdf ? 'pdf' : 'doc';
+      const date = new Date(item.modifiedTime).toLocaleDateString('es-AR', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      });
+      const meta   = isFolder ? '' : `<div class="doc-date">Modificado: ${date}</div>`;
+      const pinBtn = isFolder ? '' : `<button class="btn-pin${pinIds.has(item.id) ? ' pinned' : ''}"
+               data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${type}"
+               title="${pinIds.has(item.id) ? 'Quitar pin' : 'Fijar'}">📌</button>`;
+      return `
+        <div class="doc-item${isFolder ? ' folder-item' : ''}"
+             data-id="${item.id}"
+             data-name="${escapeHtml(item.name)}"
+             data-type="${type}">
+          <span class="doc-icon">${icon}</span>
+          <div class="doc-info">
+            <div class="doc-name">${escapeHtml(item.name)}</div>
+            ${meta}
+          </div>
+          ${pinBtn}
+          <span class="doc-arrow">›</span>
+        </div>`;
+    }).join('');
+    docList.innerHTML = html;
+  }
 
   docList.querySelectorAll('.doc-item').forEach(el => {
+    const pinBtn = el.querySelector('.btn-pin');
+    if (pinBtn) {
+      pinBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePin({ id: pinBtn.dataset.id, name: pinBtn.dataset.name, type: pinBtn.dataset.type });
+        applySearch();
+      });
+    }
     el.addEventListener('click', () => {
       if (el.dataset.type === 'folder') {
         navigateInto({ id: el.dataset.id, name: el.dataset.name });
@@ -315,13 +396,14 @@ function renderItems(items) {
 }
 
 // ── Búsqueda ──────────────────────────────────────────────────────────────────
-searchInput.addEventListener('input', () => {
+function applySearch() {
   const q = searchInput.value.trim().toLowerCase();
   const filtered = q
     ? state.allItems.filter(d => d.name.toLowerCase().includes(q))
     : state.allItems;
   renderItems(filtered);
-});
+}
+searchInput.addEventListener('input', applySearch);
 
 // ── Renderizado de Google Docs ─────────────────────────────────────────────────
 function renderGoogleDoc(doc) {
@@ -398,6 +480,7 @@ function renderTable(table) {
 let doc_current = null;
 
 async function openDoc(docId, docName) {
+  addRecent({ id: docId, name: docName, type: 'doc' });
   songTitle.textContent     = docName;
   fileTypeBadge.textContent = 'DOC';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
@@ -417,6 +500,7 @@ async function openDoc(docId, docName) {
 }
 
 async function openTxt(fileId, fileName) {
+  addRecent({ id: fileId, name: fileName, type: 'txt' });
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'TXT';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
@@ -504,6 +588,7 @@ async function setPdfZoom(delta) {
 }
 
 async function openPdf(fileId, fileName) {
+  addRecent({ id: fileId, name: fileName, type: 'pdf' });
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'PDF';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando PDF...</p>';
