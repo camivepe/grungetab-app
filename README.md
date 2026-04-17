@@ -106,10 +106,6 @@ Antes del primer deploy, agregar estos tres secrets en **GitHub → Settings →
 
 ## Backlog / Mejoras pendientes
 
+- [ ] **Unit tests**: Se puede usar algún framework sencillo y gratis para hacer pruebas sencillas del funcionamiento?
 - [ ] **Buscador avanzado**: buscar por nombre de archivo o abrir un Google Doc directamente por URL o ID, sin navegar la carpeta
-- [ ] **Caché local de contenido**: guardar el contenido de los docs abiertos en localStorage para una sección de "Recientes" y acceso offline
-- [ ] **Archivos fijados (pins)**: marcar favoritos y acceder a ellos rápidamente desde la pantalla principal
-- [ ] **Optimización para iPad**: explorar un layout de panel lateral colapsable para ver la lista y el lector simultáneamente en pantallas grandes
-- [ ] **Recargar documento**: botón en el reader para refetchear el doc actual desde Drive sin volver a la lista
 - [ ] **Imágenes en Google Docs**: las `contentUri` de la Docs API no admiten fetch con CORS; investigar alternativa (proxy, export como imagen, etc.)
-- [ ] **Controles de velocidad y tamaño de letra**: explorar una UX más intuitiva (p.ej. gestos de swipe, botones +/- discretos, o un panel colapsable) en lugar de sliders horizontales en la barra de controles

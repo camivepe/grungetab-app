@@ -39,6 +39,9 @@ const state = {
   // Navegación de carpetas
   allItems: [],
   folderStack: [], // [{id, name}]
+
+  // Archivo actualmente abierto en el reader
+  currentFile: null, // {id, name, type: 'doc'|'txt'|'pdf'}
 };
 
 // ── Velocidades ───────────────────────────────────────────────────────────────
@@ -64,6 +67,7 @@ const tabContent   = document.getElementById('tab-content');
 const controls     = document.getElementById('controls');
 const btnPlay      = document.getElementById('btn-play');
 const btnTop       = document.getElementById('btn-top');
+const btnReload    = document.getElementById('btn-reload');
 const btnBack      = document.getElementById('btn-back');
 const btnTheme     = document.getElementById('btn-theme');
 const btnListTheme = document.getElementById('btn-list-theme');
@@ -163,18 +167,19 @@ function togglePin(item) {
 
 // ── Auth: Google Identity Services ────────────────────────────────────────────
 window.onGoogleLogin = function(response) {
-  // Verificar que el email del token coincida con el autorizado
+  let email;
   try {
     const payload = JSON.parse(atob(response.credential.split('.')[1]));
     if (payload.email !== CONFIG.allowedEmail) {
       showLoginError('Acceso no autorizado.');
       return;
     }
+    email = payload.email;
   } catch (e) {
     showLoginError('Error de autenticación.');
     return;
   }
-  initOAuthClient();
+  initOAuthClient(false, email);
 };
 
 function showLoginError(msg) {
@@ -187,7 +192,7 @@ function showLoginError(msg) {
   document.getElementById('login-btn-wrapper').after(el);
 }
 
-function initOAuthClient(silent = false) {
+function initOAuthClient(silent = false, loginHint = '') {
   const onToken = (tokenResponse) => {
     if (tokenResponse.error) {
       if (silent) {
@@ -211,14 +216,16 @@ function initOAuthClient(silent = false) {
     scope: SCOPES,
     callback: onToken,
   };
-  // prompt: '' = solicitar token sin popup si ya se otorgó consentimiento.
-  // Sin esto Google siempre muestra el selector de cuenta aunque ya haya sesión.
   if (silent) {
+    // prompt: '' = solicitar token sin popup si ya se otorgó consentimiento.
     config.prompt = '';
     config.error_callback = () => {
       localStorage.removeItem('grungetab-authed');
       showScreen('login');
     };
+  } else if (loginHint) {
+    // Evitar el segundo selector de cuenta: el usuario ya eligió cuenta en GIS.
+    config.hint = loginHint;
   }
 
   const client = google.accounts.oauth2.initTokenClient(config);
@@ -480,6 +487,7 @@ function renderTable(table) {
 let doc_current = null;
 
 async function openDoc(docId, docName) {
+  state.currentFile = { id: docId, name: docName, type: 'doc' };
   addRecent({ id: docId, name: docName, type: 'doc' });
   songTitle.textContent     = docName;
   fileTypeBadge.textContent = 'DOC';
@@ -500,6 +508,7 @@ async function openDoc(docId, docName) {
 }
 
 async function openTxt(fileId, fileName) {
+  state.currentFile = { id: fileId, name: fileName, type: 'txt' };
   addRecent({ id: fileId, name: fileName, type: 'txt' });
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'TXT';
@@ -588,6 +597,7 @@ async function setPdfZoom(delta) {
 }
 
 async function openPdf(fileId, fileName) {
+  state.currentFile = { id: fileId, name: fileName, type: 'pdf' };
   addRecent({ id: fileId, name: fileName, type: 'pdf' });
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'PDF';
@@ -653,6 +663,16 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function reloadCurrentFile() {
+  const f = state.currentFile;
+  if (!f) return;
+  pause();
+  container.scrollTop = 0;
+  if (f.type === 'doc') openDoc(f.id, f.name);
+  else if (f.type === 'txt') openTxt(f.id, f.name);
+  else if (f.type === 'pdf') openPdf(f.id, f.name);
 }
 
 // ── Scroll automático ─────────────────────────────────────────────────────────
@@ -734,6 +754,7 @@ function scheduleHide() {
 // ── Event listeners ───────────────────────────────────────────────────────────
 btnPlay.addEventListener('click', togglePlay);
 btnBack.addEventListener('click',     ()  => { pause(); showScreen('list'); });
+btnReload?.addEventListener('click',  (e) => { e.stopPropagation(); reloadCurrentFile(); showControls(); });
 btnTop.addEventListener('click',      (e) => { e.stopPropagation(); pause(); container.scrollTo({ top: 0, behavior: 'smooth' }); });
 btnTheme.addEventListener('click',    (e) => { e.stopPropagation(); toggleTheme(); });
 btnListTheme.addEventListener('click',(e) => { e.stopPropagation(); toggleTheme(); });
