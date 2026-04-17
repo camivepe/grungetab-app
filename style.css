@@ -631,3 +631,51 @@ button:hover, button:active {
   white-space: pre;
   margin: 0;
 }
+
+/* ── TABLET / iPAD (≥ 768px) ─────────────────────────────────────────────── */
+@media (min-width: 768px) {
+
+  /* Lista: padding lateral más generoso */
+  #list-header,
+  #search-wrapper {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  .doc-item,
+  .quick-section-header {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* Lector: más margen lateral y área de contenido más ancha */
+  #tab-container {
+    padding: 80px 48px 100px;
+  }
+
+  #tab-content {
+    max-width: 960px;
+  }
+
+  /* Controles: padding lateral coherente con la lista */
+  #controls-top,
+  #controls-bottom {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* Settings: una sola fila horizontal en vez de 3 filas apiladas */
+  #settings-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px 40px;
+  }
+
+  #speed-control,
+  #view-options,
+  #zoom-control {
+    flex: 0 0 auto;
+  }
+}
