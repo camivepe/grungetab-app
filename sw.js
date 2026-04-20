@@ -1,6 +1,6 @@
 /* ── GrungeTab · sw.js ── */
 
-const CACHE_NAME = 'grungetab-v1';
+const CACHE_NAME = 'grungetab-__CACHE_VERSION__';
 
 const ASSETS = [
   '/',

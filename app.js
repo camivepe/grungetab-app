@@ -166,20 +166,20 @@ function togglePin(item) {
 }
 
 // ── Auth: Google Identity Services ────────────────────────────────────────────
-window.onGoogleLogin = function(response) {
-  let email;
+window.onGoogleLogin = async function(response) {
   try {
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    if (payload.email !== CONFIG.allowedEmail) {
-      showLoginError('Acceso no autorizado.');
-      return;
-    }
-    email = payload.email;
+    const res = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${response.credential}`
+    );
+    if (!res.ok) throw new Error('Token inválido');
+    const payload = await res.json();
+    // Verificar que el token fue emitido para esta app y para el email autorizado
+    if (payload.aud !== CONFIG.clientId)        throw new Error('Audience inválido');
+    if (payload.email !== CONFIG.allowedEmail)  { showLoginError('Acceso no autorizado.'); return; }
+    initOAuthClient(false, payload.email);
   } catch (e) {
     showLoginError('Error de autenticación.');
-    return;
   }
-  initOAuthClient(false, email);
 };
 
 function showLoginError(msg) {
@@ -519,10 +519,7 @@ async function openTxt(fileId, fileName) {
   pause();
 
   try {
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${state.accessToken}` } }
-    );
+    const res = await authFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
@@ -532,14 +529,20 @@ async function openTxt(fileId, fileName) {
 }
 
 // ── PDF viewer ────────────────────────────────────────────────────────────────
+const PDFJS_CDN    = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const PDFJS_SRI    = 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e';
+
 function loadPdfJs() {
   if (window.pdfjsLib) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.src               = PDFJS_CDN;
+    script.integrity         = PDFJS_SRI;
+    script.crossOrigin       = 'anonymous';
+    script.referrerPolicy    = 'no-referrer';
     script.onload = () => {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
       resolve();
     };
     script.onerror = () => reject(new Error('No se pudo cargar PDF.js'));
@@ -589,11 +592,26 @@ async function renderPdfPages() {
   container.scrollTop = prevScrollTop;
 }
 
+let pdfZoomDebounce = null;
+
 async function setPdfZoom(delta) {
   if (!state.pdfDoc) return;
   state.pdfScale = Math.max(0.5, Math.min(3.0, state.pdfScale + delta));
   updateZoomLabel();
-  await renderPdfPages();
+
+  // Feedback visual inmediato vía CSS transform sobre el wrapper existente
+  const wrapper = tabContent.querySelector('.pdf-rendered');
+  if (wrapper) {
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform = `scale(${state.pdfScale})`;
+  }
+
+  // Re-render real con debounce para no re-dibujar cada canvas en cada click
+  clearTimeout(pdfZoomDebounce);
+  pdfZoomDebounce = setTimeout(async () => {
+    if (wrapper) wrapper.style.transform = '';
+    await renderPdfPages();
+  }, 350);
 }
 
 async function openPdf(fileId, fileName) {
@@ -612,10 +630,7 @@ async function openPdf(fileId, fileName) {
   try {
     await loadPdfJs();
 
-    const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${state.accessToken}` } }
-    );
+    const res = await authFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.arrayBuffer();
 
@@ -644,11 +659,39 @@ function resolveAuthImages(container) {
   });
 }
 
-// ── Helper: fetch autenticado ─────────────────────────────────────────────────
-async function driveGet(url) {
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${state.accessToken}` },
+// ── Helper: renovar token OAuth silenciosamente ───────────────────────────────
+function refreshToken() {
+  return new Promise((resolve, reject) => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id:      CONFIG.clientId,
+      scope:          SCOPES,
+      prompt:         '',
+      callback:       (r) => r.error ? reject(new Error(r.error)) : (state.accessToken = r.access_token, resolve()),
+      error_callback: (e) => reject(new Error(e?.type || 'token_error')),
+    });
+    client.requestAccessToken();
   });
+}
+
+// ── Helper: fetch autenticado con retry en 401 ────────────────────────────────
+async function authFetch(url) {
+  let res = await fetch(url, { headers: { Authorization: `Bearer ${state.accessToken}` } });
+  if (res.status === 401) {
+    try {
+      await refreshToken();
+    } catch {
+      localStorage.removeItem('grungetab-authed');
+      state.accessToken = null;
+      showScreen('login');
+      throw new Error('Sesión expirada.');
+    }
+    res = await fetch(url, { headers: { Authorization: `Bearer ${state.accessToken}` } });
+  }
+  return res;
+}
+
+async function driveGet(url) {
+  const res = await authFetch(url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err?.error?.message || `HTTP ${res.status}`);
@@ -807,11 +850,17 @@ speedLabel.textContent = SPEED_LABELS[state.speed];
 if (localStorage.getItem('grungetab-authed') === '1') {
   // Hay una sesión previa: esperar a que cargue GIS e intentar token silencioso.
   // Si falla (sesión expirada, permisos revocados) initOAuthClient(true) muestra el login.
+  const GIS_TIMEOUT_MS = 10_000;
+  const gisStart = Date.now();
   (function waitForGIS() {
     if (typeof google !== 'undefined' && google.accounts?.oauth2) {
       initOAuthClient(true);
-    } else {
+    } else if (Date.now() - gisStart < GIS_TIMEOUT_MS) {
       setTimeout(waitForGIS, 50);
+    } else {
+      localStorage.removeItem('grungetab-authed');
+      showLoginError('No se pudo conectar con Google. Verifica tu conexión.');
+      showScreen('login');
     }
   })();
 } else {

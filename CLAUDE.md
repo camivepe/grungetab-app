@@ -27,16 +27,15 @@ The Service Worker is intentionally disabled on `localhost` — it only activate
 
 ## Deployment
 
-Merging to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`), which injects three GitHub secrets into `index.html` and deploys to GitHub Pages:
-- `GOOGLE_CLIENT_ID` — OAuth client ID
-- `ALLOWED_EMAIL` — the only Google account allowed to log in
-- `TABS_FOLDER_ID` — root Drive folder ID for the tablature library
+Merging to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`), which injects values into source files and deploys to GitHub Pages:
+- `index.html` receives three GitHub secrets: `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL`, `TABS_FOLDER_ID`
+- `sw.js` receives `$(git rev-parse --short HEAD)` as `__CACHE_VERSION__`, so each deploy gets a unique cache name (e.g. `grungetab-a1b2c3d`) and the browser discards stale cached assets automatically.
 
 ## Access control
 
 The app is locked to a single user via two layers:
 1. **Google Cloud Console** — OAuth app kept in *Testing* mode with only the owner's email as a test user. Google rejects all other accounts at the OAuth level.
-2. **Post-login email check** — `onGoogleLogin` decodes the JWT credential and compares `payload.email` against `CONFIG.allowedEmail` before requesting an access token.
+2. **Post-login email check** — `onGoogleLogin` validates the ID token against `https://oauth2.googleapis.com/tokeninfo` (verifies signature, expiry, and `aud`), then compares `payload.email` against `CONFIG.allowedEmail` before requesting an access token.
 
 ## Architecture
 
@@ -45,15 +44,3 @@ The app is entirely self-contained in four files:
 - `app.js` — all application logic (auth, Drive API, rendering, scroll engine)
 - `style.css` — theming via CSS custom properties on `body.dark` / `body.light`
 - `sw.js` — service worker for offline caching
-
-**Auth flow:** Google Identity Services button → `onGoogleLogin` (email verified) → `initOAuthClient()` requests an OAuth2 access token with Drive + Docs read-only scopes. The token lives only in memory (`state.accessToken`).
-
-**Folder navigation:** `loadFolder(id, name)` lists both Google Docs and subfolders inside a given Drive folder. Navigation history is tracked in `state.folderStack` (array of `{id, name}`). `navigateInto()` pushes to the stack; `navigateUp()` pops. The `#btn-list-back` button is hidden when at the root and visible inside any subfolder.
-
-**Rendering:** The Google Docs API response is parsed in `renderGoogleDoc()` → `renderParagraph()` / `renderTable()`. Images use `contentUri` from `inlineObjects`. The global `doc_current` variable holds the current doc so `renderParagraph` can resolve inline image references.
-
-**Scroll engine:** Uses `requestAnimationFrame` with sub-pixel accumulation (`state.scrollAccum`) to achieve smooth, speed-adjustable auto-scroll. Speed levels 1–4 map to 8/22/40/80 px/s.
-
-**Screen navigation:** `showScreen(name)` toggles `.hidden` on the three screen divs. State is kept in the `state` object.
-
-**Theme:** Persisted in `localStorage` under `grungetab-theme`. Applied via `body.dark` / `body.light` CSS classes; all colors are CSS custom properties.

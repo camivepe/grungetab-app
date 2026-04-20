@@ -105,7 +105,3 @@ Antes del primer deploy, agregar estos tres secrets en **GitHub → Settings →
 ---
 
 ## Backlog / Mejoras pendientes
-
-- [ ] **Unit tests**: Se puede usar algún framework sencillo y gratis para hacer pruebas sencillas del funcionamiento?
-- [ ] **Buscador avanzado**: buscar por nombre de archivo o abrir un Google Doc directamente por URL o ID, sin navegar la carpeta
-- [ ] **Imágenes en Google Docs**: las `contentUri` de la Docs API no admiten fetch con CORS; investigar alternativa (proxy, export como imagen, etc.)
