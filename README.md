@@ -105,3 +105,34 @@ Antes del primer deploy, agregar estos tres secrets en **GitHub → Settings →
 ---
 
 ## Backlog / Mejoras pendientes
+
+Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pantalla).
+
+### Alta prioridad
+
+- [x] **Wake Lock API (UX)** — la pantalla se apaga durante el auto-scroll, justo contra el propósito de la app. Pedir `navigator.wakeLock.request('screen')` al entrar al reader y liberar al salir.
+- [x] **Service Worker: network-first para HTML/JS (perf/UX)** — hoy es cache-first puro. Tras un deploy, el usuario ve la versión vieja hasta el segundo reload. Network-first con fallback a cache para navegación y assets versionados, cache-first para el resto.
+- [x] **Cache offline de documentos abiertos (UX)** — permite tocar sin internet. Guardar en `caches` (o IndexedDB) los docs/txt/pdf ya vistos y usarlos como fallback cuando la red falla.
+- [x] **`access_token` en URL de imágenes (seguridad)** — `resolveAuthImages` (app.js:655) mete el token como query param. Se filtra a Referer, historial y logs. Reemplazar por `fetch` con `Authorization` header + `URL.createObjectURL(blob)`.
+- [x] **Soporte del botón Atrás del navegador/Android (UX)** — hoy cierra la app en vez de volver a la lista. Usar `history.pushState` al cambiar de pantalla y escuchar `popstate`.
+- [x] **CSP vía `<meta http-equiv>` (seguridad)** — defensa en profundidad contra XSS. Restringir `script-src`, `connect-src`, `img-src` a los orígenes reales (Google, cdnjs). _(Nota: sigue usando `'unsafe-inline'` en `script-src` porque el bloque de `window.GRUNGETAB_CONFIG` está inline en `index.html`. Mover a `config.js` separado permitiría endurecerlo — TODO aparte.)_
+
+### Media prioridad
+
+- [ ] **Atajos de teclado (UX)** — Espacio = play/pausa, ↑/↓ = velocidad, +/− = fuente, Esc = volver. Útil en tablet/laptop con teclado Bluetooth.
+- [ ] **Render lazy del PDF (perf)** — `renderPdfPages` renderiza todas las páginas de forma secuencial con `await` (app.js:576). Para PDFs largos bloquea segundos. Renderizar solo páginas visibles con `IntersectionObserver`.
+- [ ] **Actualizar PDF.js (seguridad)** — versión 3.11.174 (2023). Subir a la última 4.x y regenerar SRI.
+- [ ] **Retry en errores de carga (UX)** — hoy el mensaje de error es un callejón sin salida. Agregar botón "Reintentar" en el mensaje de `loadFolder`, `openDoc`, etc.
+- [ ] **Pinch-to-zoom en PDFs (UX)** — hoy solo +/− con botones. Agregar gesto con `touchstart`/`touchmove` o CSS `touch-action: pinch-zoom`.
+- [ ] **Notificar updates del SW (UX)** — cuando se active un SW nuevo, mostrar un toast "Nueva versión disponible · Recargar" en vez de esperar a que el usuario descubra que hay cambios.
+- [ ] **Escape del `src` de imágenes (seguridad)** — en `renderParagraph` (app.js:447) se inyecta `src` sin escapar. Riesgo bajo (viene de la API de Google) pero fácil de cerrar con `escapeHtml`.
+
+### Baja prioridad
+
+- [ ] **Fijar carpetas (UX)** — hoy `btn-pin` solo aparece en archivos (app.js:362). Para carpetas muy usadas, tendría sentido.
+- [ ] **Esc limpia el buscador (UX)** — quick-win de accesibilidad.
+- [ ] **`preconnect` a cdnjs (perf)** — agregar `<link rel="preconnect" href="https://cdnjs.cloudflare.com">` para que el primer PDF cargue más rápido.
+- [ ] **Cachear `loadPins()`/`loadRecents()` en memoria (perf)** — hoy se parsean desde localStorage en cada `renderItems`. Mantener una copia en `state` e invalidar en `togglePin`/`addRecent`.
+- [ ] **Mover `doc_current` a `state` (calidad)** — variable module-level mutable (app.js:487), inconsistente con el resto del estado.
+- [ ] **Búsqueda recursiva entre carpetas (UX)** — hoy el buscador solo filtra la carpeta actual.
+

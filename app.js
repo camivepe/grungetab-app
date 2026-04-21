@@ -97,7 +97,36 @@ function showScreen(name) {
   if (name === 'login')  screenLogin.classList.remove('hidden');
   if (name === 'list')   screenList.classList.remove('hidden');
   if (name === 'reader') screenReader.classList.remove('hidden');
+
+  if (name === 'reader') requestWakeLock();
+  else releaseWakeLock();
 }
+
+// ── Wake Lock: mantener la pantalla encendida en el reader ────────────────────
+let wakeLockSentinel = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator) || wakeLockSentinel) return;
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+  } catch {
+    // denegado, batería baja, pestaña oculta, etc. — silencioso
+  }
+}
+
+function releaseWakeLock() {
+  if (!wakeLockSentinel) return;
+  wakeLockSentinel.release().catch(() => {});
+  wakeLockSentinel = null;
+}
+
+// El navegador libera el wake lock al ocultar la pestaña; re-pedirlo al volver.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !screenReader.classList.contains('hidden')) {
+    requestWakeLock();
+  }
+});
 
 // ── Tema ──────────────────────────────────────────────────────────────────────
 function applyTheme(theme) {
@@ -293,6 +322,7 @@ function currentFolder() {
 
 function navigateInto(folder) {
   state.folderStack.push(folder);
+  history.pushState({ screen: 'list', folder: folder.id }, '');
   loadFolder(folder.id, folder.name);
 }
 
@@ -301,6 +331,20 @@ function navigateUp() {
   const parent = currentFolder();
   loadFolder(parent.id, parent.name);
 }
+
+// Historial: el botón Atrás del navegador/Android vuelve a la lista o sube de
+// carpeta en vez de salir de la app. Los botones internos disparan history.back()
+// y el resto lo maneja este handler.
+window.addEventListener('popstate', () => {
+  if (!screenReader.classList.contains('hidden')) {
+    pause();
+    showScreen('list');
+    return;
+  }
+  if (!screenList.classList.contains('hidden') && state.folderStack.length > 0) {
+    navigateUp();
+  }
+});
 
 function renderQuickAccess(pinIds) {
   if (searchInput.value.trim()) return '';
@@ -493,16 +537,31 @@ async function openDoc(docId, docName) {
   fileTypeBadge.textContent = 'DOC';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
   setFileTypeControls('doc');
+  history.pushState({ screen: 'reader', id: docId }, '');
   showScreen('reader');
   container.scrollTop = 0;
   pause();
 
   try {
-    const doc = await driveGet(`https://docs.googleapis.com/v1/documents/${docId}`);
+    const res = await authFetch(`https://docs.googleapis.com/v1/documents/${docId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${res.status}`);
+    }
+    saveOffline('doc', docId, res);
+    const doc = await res.json();
     doc_current = doc;
     tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
     resolveAuthImages(tabContent);
   } catch (err) {
+    const cached = await loadOffline('doc', docId);
+    if (cached) {
+      const doc = await cached.json();
+      doc_current = doc;
+      tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
+      fileTypeBadge.textContent = 'DOC · OFFLINE';
+      return;
+    }
     tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el documento.<br><small>${err.message}</small></p>`;
   }
 }
@@ -514,6 +573,7 @@ async function openTxt(fileId, fileName) {
   fileTypeBadge.textContent = 'TXT';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
   setFileTypeControls('txt');
+  history.pushState({ screen: 'reader', id: fileId }, '');
   showScreen('reader');
   container.scrollTop = 0;
   pause();
@@ -521,9 +581,17 @@ async function openTxt(fileId, fileName) {
   try {
     const res = await authFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    saveOffline('txt', fileId, res);
     const text = await res.text();
     tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
   } catch (err) {
+    const cached = await loadOffline('txt', fileId);
+    if (cached) {
+      const text = await cached.text();
+      tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
+      fileTypeBadge.textContent = 'TXT · OFFLINE';
+      return;
+    }
     tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el archivo.<br><small>${err.message}</small></p>`;
   }
 }
@@ -620,6 +688,7 @@ async function openPdf(fileId, fileName) {
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'PDF';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando PDF...</p>';
+  history.pushState({ screen: 'reader', id: fileId }, '');
   showScreen('reader');
   container.scrollTop = 0;
   pause();
@@ -632,11 +701,23 @@ async function openPdf(fileId, fileName) {
 
     const res = await authFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    saveOffline('pdf', fileId, res);
     const data = await res.arrayBuffer();
 
     state.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
     await renderPdfPages();
   } catch (err) {
+    try {
+      await loadPdfJs();
+      const cached = await loadOffline('pdf', fileId);
+      if (cached) {
+        const data = await cached.arrayBuffer();
+        state.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+        await renderPdfPages();
+        fileTypeBadge.textContent = 'PDF · OFFLINE';
+        return;
+      }
+    } catch { /* PDF.js falló al cargar offline — cae al mensaje de error */ }
     state.pdfDoc = null;
     tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el PDF.<br><small>${err.message}</small></p>`;
   }
@@ -645,16 +726,23 @@ async function openPdf(fileId, fileName) {
 // ── Imágenes de Google Docs ───────────────────────────────────────────────────
 // Los contentUri de la Docs API ya llevan autenticación en el parámetro ?key=,
 // por lo que los <img> los cargan directamente sin fetch adicional.
-// fetch() con Authorization header falla por CORS en lh*.googleusercontent.com.
-// Si la imagen no carga por onerror, intentamos agregar el access_token como
-// query param (último recurso para URLs que requieran auth explícita).
+// Si la imagen falla (key expirado, etc.), intentamos fetch con Authorization
+// header y exponerla como Blob URL — así el access_token nunca queda en la URL
+// del <img> ni se filtra a Referer/historial/logs.
 function resolveAuthImages(container) {
   container.querySelectorAll('img[data-original-src]').forEach(img => {
-    img.onerror = () => {
-      const url = new URL(img.dataset.originalSrc);
-      url.searchParams.set('access_token', state.accessToken);
-      img.onerror = null; // evitar loop infinito
-      img.src = url.toString();
+    img.onerror = async () => {
+      img.onerror = null; // evitar loop
+      try {
+        const res = await fetch(img.dataset.originalSrc, {
+          headers: { Authorization: `Bearer ${state.accessToken}` },
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        img.src = URL.createObjectURL(blob);
+      } catch {
+        // CORS, red, etc. — imagen queda rota (fallback silencioso)
+      }
     };
   });
 }
@@ -697,6 +785,36 @@ async function driveGet(url) {
     throw new Error(err?.error?.message || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+// ── Cache offline de archivos del usuario ─────────────────────────────────────
+// Guarda en Cache API las respuestas de docs/txt/pdf ya cargados para poder
+// abrirlos sin red. El cache 'grungetab-offline-files' no lleva version hash:
+// el SW lo preserva entre deploys (ver sw.js).
+const OFFLINE_CACHE = 'grungetab-offline-files';
+
+function offlineKey(type, id) {
+  return `/offline/${type}/${encodeURIComponent(id)}`;
+}
+
+async function saveOffline(type, id, response) {
+  if (!('caches' in window)) return;
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+    await cache.put(offlineKey(type, id), response.clone());
+  } catch {
+    // quota exceeded, modo incógnito, etc. — silencioso
+  }
+}
+
+async function loadOffline(type, id) {
+  if (!('caches' in window)) return null;
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+    return await cache.match(offlineKey(type, id));
+  } catch {
+    return null;
+  }
 }
 
 // ── Helper: escape HTML ───────────────────────────────────────────────────────
@@ -796,13 +914,13 @@ function scheduleHide() {
 
 // ── Event listeners ───────────────────────────────────────────────────────────
 btnPlay.addEventListener('click', togglePlay);
-btnBack.addEventListener('click',     ()  => { pause(); showScreen('list'); });
+btnBack.addEventListener('click',     ()  => { history.back(); });
 btnReload?.addEventListener('click',  (e) => { e.stopPropagation(); reloadCurrentFile(); showControls(); });
 btnTop.addEventListener('click',      (e) => { e.stopPropagation(); pause(); container.scrollTo({ top: 0, behavior: 'smooth' }); });
 btnTheme.addEventListener('click',    (e) => { e.stopPropagation(); toggleTheme(); });
 btnListTheme.addEventListener('click',(e) => { e.stopPropagation(); toggleTheme(); });
 btnLogout.addEventListener('click',   (e) => { e.stopPropagation(); logout(); });
-btnListBack.addEventListener('click', (e) => { e.stopPropagation(); navigateUp(); });
+btnListBack.addEventListener('click', (e) => { e.stopPropagation(); history.back(); });
 btnWrap.addEventListener('click',      (e) => { e.stopPropagation(); applyWrap(!state.noWrap); showControls(); scheduleHide(); });
 btnZoomIn.addEventListener('click',    (e) => { e.stopPropagation(); setPdfZoom(+0.25); showControls(); scheduleHide(); });
 btnZoomOut.addEventListener('click',   (e) => { e.stopPropagation(); setPdfZoom(-0.25); showControls(); scheduleHide(); });

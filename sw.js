@@ -2,6 +2,10 @@
 
 const CACHE_NAME = 'grungetab-__CACHE_VERSION__';
 
+// Cache separado para archivos del usuario (docs/txt/pdf) ya abiertos.
+// No incluye el version hash: debe sobrevivir a los deploys.
+const OFFLINE_CACHE = 'grungetab-offline-files';
+
 const ASSETS = [
   '/',
   '/index.html',
@@ -33,7 +37,7 @@ self.addEventListener('activate', (event) => {
       caches.keys().then((keys) =>
           Promise.all(
               keys
-                  .filter((key) => key !== CACHE_NAME)
+                  .filter((key) => key !== CACHE_NAME && key !== OFFLINE_CACHE)
                   .map((key) => caches.delete(key))
           )
       )
@@ -41,11 +45,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: responder desde cache, con fallback a red
+// Fetch:
+// - Mismo origen: network-first con fallback a cache. Garantiza que un deploy
+//   nuevo se vea en la primera recarga si hay red, manteniendo modo offline.
+//   Cada respuesta OK refresca la entrada cacheada.
+// - Cross-origin (Google APIs, CDNs): no interceptar, que el browser lo maneje.
 self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;
+
   event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request);
-      })
+      fetch(req)
+          .then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+            }
+            return res;
+          })
+          .catch(() => caches.match(req).then((cached) => cached || Response.error()))
   );
 });
