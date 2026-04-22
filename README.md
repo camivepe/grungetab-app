@@ -129,10 +129,10 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 
 ### Baja prioridad
 
-- [ ] **Fijar carpetas (UX)** — hoy `btn-pin` solo aparece en archivos (app.js:362). Para carpetas muy usadas, tendría sentido.
-- [ ] **Esc limpia el buscador (UX)** — quick-win de accesibilidad.
-- [ ] **`preconnect` a cdnjs (perf)** — agregar `<link rel="preconnect" href="https://cdnjs.cloudflare.com">` para que el primer PDF cargue más rápido.
-- [ ] **Cachear `loadPins()`/`loadRecents()` en memoria (perf)** — hoy se parsean desde localStorage en cada `renderItems`. Mantener una copia en `state` e invalidar en `togglePin`/`addRecent`.
-- [ ] **Mover `doc_current` a `state` (calidad)** — variable module-level mutable (app.js:487), inconsistente con el resto del estado.
-- [ ] **Búsqueda recursiva entre carpetas (UX)** — hoy el buscador solo filtra la carpeta actual.
+- [x] **Fijar carpetas (UX)** — hoy `btn-pin` solo aparece en archivos (app.js:362). Para carpetas muy usadas, tendría sentido.
+- [x] **Esc limpia el buscador (UX)** — quick-win de accesibilidad.
+- [x] **`preconnect` a cdnjs (perf)** — agregar `<link rel="preconnect" href="https://cdnjs.cloudflare.com">` para que el primer PDF cargue más rápido.
+- [x] **Cachear `loadPins()`/`loadRecents()` en memoria (perf)** — hoy se parsean desde localStorage en cada `renderItems`. Mantener una copia en `state` e invalidar en `togglePin`/`addRecent`.
+- [x] **Mover `doc_current` a `state` (calidad)** — variable module-level mutable (app.js:487), inconsistente con el resto del estado.
+- [x] **Búsqueda recursiva entre carpetas (UX)** — hoy el buscador solo filtra la carpeta actual.
 

@@ -42,6 +42,11 @@ const state = {
 
   // Archivo actualmente abierto en el reader
   currentFile: null, // {id, name, type: 'doc'|'txt'|'pdf'}
+  currentDoc:  null, // documento Google Docs actualmente cargado
+
+  // Caché en memoria de localStorage (invalidar en savePins/saveRecents)
+  pins:    [],
+  recents: [],
 };
 
 // ── Velocidades ───────────────────────────────────────────────────────────────
@@ -174,9 +179,12 @@ function loadRecents() {
   try { return JSON.parse(localStorage.getItem('grungetab-recents') || '[]'); }
   catch { return []; }
 }
-function saveRecents(arr) { localStorage.setItem('grungetab-recents', JSON.stringify(arr)); }
+function saveRecents(arr) {
+  state.recents = arr;
+  localStorage.setItem('grungetab-recents', JSON.stringify(arr));
+}
 function addRecent(item) {
-  const r = loadRecents().filter(x => x.id !== item.id);
+  const r = state.recents.filter(x => x.id !== item.id);
   r.unshift(item);
   saveRecents(r.slice(0, RECENTS_MAX));
 }
@@ -185,9 +193,12 @@ function loadPins() {
   try { return JSON.parse(localStorage.getItem('grungetab-pins') || '[]'); }
   catch { return []; }
 }
-function savePins(arr) { localStorage.setItem('grungetab-pins', JSON.stringify(arr)); }
+function savePins(arr) {
+  state.pins = arr;
+  localStorage.setItem('grungetab-pins', JSON.stringify(arr));
+}
 function togglePin(item) {
-  const pins = loadPins();
+  const pins = state.pins.slice();
   const idx  = pins.findIndex(p => p.id === item.id);
   if (idx >= 0) pins.splice(idx, 1);
   else pins.push(item);
@@ -350,11 +361,11 @@ window.addEventListener('popstate', () => {
 function renderQuickAccess(pinIds) {
   if (searchInput.value.trim()) return '';
 
-  const pins    = loadPins();
-  const recents = loadRecents();
+  const pins    = state.pins;
+  const recents = state.recents;
   if (pins.length === 0 && recents.length === 0) return '';
 
-  const icons = { doc: '📄', txt: '🎸', pdf: '📕' };
+  const icons = { doc: '📄', txt: '🎸', pdf: '📕', folder: '📁' };
   const itemHtml = (item) => {
     const pinned = pinIds.has(item.id);
     return `
@@ -382,8 +393,7 @@ function renderQuickAccess(pinIds) {
 }
 
 function renderItems(items) {
-  const pins   = loadPins();
-  const pinIds = new Set(pins.map(p => p.id));
+  const pinIds = new Set(state.pins.map(p => p.id));
 
   let html = renderQuickAccess(pinIds);
 
@@ -404,7 +414,7 @@ function renderItems(items) {
         day: '2-digit', month: 'short', year: 'numeric',
       });
       const meta   = isFolder ? '' : `<div class="doc-date">Modificado: ${date}</div>`;
-      const pinBtn = isFolder ? '' : `<button class="btn-pin${pinIds.has(item.id) ? ' pinned' : ''}"
+      const pinBtn = `<button class="btn-pin${pinIds.has(item.id) ? ' pinned' : ''}"
                data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${type}"
                title="${pinIds.has(item.id) ? 'Quitar pin' : 'Fijar'}">📌</button>`;
       return `
@@ -447,14 +457,33 @@ function renderItems(items) {
   });
 }
 
-// ── Búsqueda ──────────────────────────────────────────────────────────────────
+// ── Búsqueda (local inmediata + recursiva en Drive con debounce) ──────────────
+let searchDebounce = null;
+
 function applySearch() {
-  const q = searchInput.value.trim().toLowerCase();
-  const filtered = q
-    ? state.allItems.filter(d => d.name.toLowerCase().includes(q))
-    : state.allItems;
-  renderItems(filtered);
+  const q = searchInput.value.trim();
+  clearTimeout(searchDebounce);
+  if (!q) { renderItems(state.allItems); return; }
+  renderItems(state.allItems.filter(d => d.name.toLowerCase().includes(q.toLowerCase())));
+  searchDebounce = setTimeout(() => searchDrive(q), 400);
 }
+
+async function searchDrive(query) {
+  if (searchInput.value.trim() !== query) return;
+  const esc = query.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const params = new URLSearchParams({
+    q: `name contains '${esc}' and trashed=false and (mimeType='application/vnd.google-apps.document' or mimeType='application/vnd.google-apps.folder' or mimeType='text/plain' or mimeType='application/pdf')`,
+    fields: 'files(id, name, mimeType, modifiedTime)',
+    orderBy: 'name',
+    pageSize: 50,
+  });
+  try {
+    const res = await driveGet(`https://www.googleapis.com/drive/v3/files?${params}`);
+    if (searchInput.value.trim() !== query) return;
+    renderItems(res.files || []);
+  } catch { /* mantener resultados locales si falla la red */ }
+}
+
 searchInput.addEventListener('input', applySearch);
 
 // ── Renderizado de Google Docs ─────────────────────────────────────────────────
@@ -481,7 +510,7 @@ function renderParagraph(para) {
       line += span;
     } else if (el.inlineObjectElement) {
       const objId = el.inlineObjectElement.inlineObjectId;
-      const obj   = doc_current?.inlineObjects?.[objId];
+      const obj   = state.currentDoc?.inlineObjects?.[objId];
       if (obj) {
         const props = obj.inlineObjectProperties?.embeddedObject;
         // contentUri = imagen hosteada por Google (requiere auth).
@@ -529,8 +558,6 @@ function renderTable(table) {
   return html;
 }
 
-let doc_current = null;
-
 async function openDoc(docId, docName) {
   state.currentFile = { id: docId, name: docName, type: 'doc' };
   addRecent({ id: docId, name: docName, type: 'doc' });
@@ -551,14 +578,14 @@ async function openDoc(docId, docName) {
     }
     saveOffline('doc', docId, res);
     const doc = await res.json();
-    doc_current = doc;
+    state.currentDoc = doc;
     tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
     resolveAuthImages(tabContent);
   } catch (err) {
     const cached = await loadOffline('doc', docId);
     if (cached) {
       const doc = await cached.json();
-      doc_current = doc;
+      state.currentDoc = doc;
       tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
       fileTypeBadge.textContent = 'DOC · OFFLINE';
       return;
@@ -1013,7 +1040,10 @@ container.addEventListener('touchend', () => {
 
 // ── Atajos de teclado (solo en lector) ────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
-  if (document.activeElement?.tagName === 'INPUT') return;
+  if (document.activeElement?.tagName === 'INPUT') {
+    if (e.key === 'Escape') { searchInput.value = ''; searchInput.blur(); applySearch(); }
+    return;
+  }
   if (screenReader.classList.contains('hidden')) return;
   switch (e.key) {
     case ' ':
@@ -1072,6 +1102,8 @@ if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
 loadTheme();
 loadViewPrefs();
 speedLabel.textContent = SPEED_LABELS[state.speed];
+state.pins    = loadPins();
+state.recents = loadRecents();
 
 if (localStorage.getItem('grungetab-authed') === '1') {
   // Hay una sesión previa: esperar a que cargue GIS e intentar token silencioso.
