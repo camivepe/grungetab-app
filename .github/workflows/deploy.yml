@@ -27,9 +27,9 @@ jobs:
 
       - name: Inject secrets
         run: |
-          sed -i "s|__GOOGLE_CLIENT_ID__|${{ secrets.GOOGLE_CLIENT_ID }}|g" index.html
-          sed -i "s|__ALLOWED_EMAIL__|${{ secrets.ALLOWED_EMAIL }}|g" index.html
-          sed -i "s|__TABS_FOLDER_ID__|${{ secrets.TABS_FOLDER_ID }}|g" index.html
+          sed -i "s|__GOOGLE_CLIENT_ID__|${{ secrets.GOOGLE_CLIENT_ID }}|g" index.html config.js
+          sed -i "s|__ALLOWED_EMAIL__|${{ secrets.ALLOWED_EMAIL }}|g" config.js
+          sed -i "s|__TABS_FOLDER_ID__|${{ secrets.TABS_FOLDER_ID }}|g" config.js
           sed -i "s|__CACHE_VERSION__|$(git rev-parse --short HEAD)|g" sw.js
 
       - name: Setup Pages

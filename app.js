@@ -518,7 +518,7 @@ function renderParagraph(para) {
         const src = props?.imageProperties?.contentUri
                  || props?.imageProperties?.sourceUri;
         if (src) {
-          line += `<img src="${escapeHtml(src)}" alt="imagen" data-original-src="${escapeHtml(src)}" />`;
+          line += `<img src="${escapeHtml(src)}" alt="imagen" data-original-src="${escapeHtml(src)}" data-object-id="${escapeHtml(objId)}" />`;
         }
       }
     }
@@ -581,12 +581,14 @@ async function openDoc(docId, docName) {
     state.currentDoc = doc;
     tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
     resolveAuthImages(tabContent);
+    cacheDocImages(doc, docId).catch(() => {});
   } catch (err) {
     const cached = await loadOffline('doc', docId);
     if (cached) {
       const doc = await cached.json();
       state.currentDoc = doc;
       tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
+      resolveOfflineImages(tabContent, docId);
       fileTypeBadge.textContent = 'DOC · OFFLINE';
       return;
     }
@@ -665,6 +667,7 @@ async function renderPdfPages() {
   const pdf = state.pdfDoc;
   const prevScrollTop = container.scrollTop;
   const baseW = tabContent.clientWidth || (container.clientWidth - 32);
+  lastPdfBaseWidth = baseW;
 
   const wrapper = document.createElement('div');
   wrapper.className = 'pdf-rendered';
@@ -711,6 +714,8 @@ async function renderPdfPages() {
 
 let pdfZoomDebounce = null;
 let pdfPageObserver = null;
+let lastPdfBaseWidth = 0;
+let pdfResizeDebounce = null;
 
 async function setPdfZoom(delta) {
   if (!state.pdfDoc) return;
@@ -796,6 +801,49 @@ function resolveAuthImages(container) {
       }
     };
   });
+}
+
+function offlineImageKey(docId, objectId) {
+  return `/offline/doc-image/${encodeURIComponent(docId)}/${encodeURIComponent(objectId)}`;
+}
+
+// Fetchea cada inlineObject con auth y lo guarda en OFFLINE_CACHE. Fire-and-forget:
+// las imágenes que no se alcanzaron a cachear quedan rotas al cargar offline.
+async function cacheDocImages(doc, docId) {
+  if (!('caches' in window) || !doc?.inlineObjects) return;
+  const cache = await caches.open(OFFLINE_CACHE);
+  const entries = Object.entries(doc.inlineObjects);
+  await Promise.all(entries.map(async ([objId, obj]) => {
+    const src = obj?.inlineObjectProperties?.embeddedObject?.imageProperties?.contentUri;
+    if (!src) return;
+    try {
+      const res = await fetch(src, {
+        headers: { Authorization: `Bearer ${state.accessToken}` },
+      });
+      if (!res.ok) return;
+      await cache.put(offlineImageKey(docId, objId), res);
+    } catch {
+      // red, CORS, etc.
+    }
+  }));
+}
+
+// Al cargar un doc desde cache, reemplaza el src de cada <img> por el blob
+// cacheado antes de que el browser intente fetchear el contentUri de Google.
+async function resolveOfflineImages(container, docId) {
+  if (!('caches' in window)) return;
+  const cache = await caches.open(OFFLINE_CACHE);
+  const imgs = container.querySelectorAll('img[data-object-id]');
+  await Promise.all([...imgs].map(async (img) => {
+    try {
+      const res = await cache.match(offlineImageKey(docId, img.dataset.objectId));
+      if (!res) return;
+      const blob = await res.blob();
+      img.src = URL.createObjectURL(blob);
+    } catch {
+      // silencioso
+    }
+  }));
 }
 
 // ── Helper: renovar token OAuth silenciosamente ───────────────────────────────
@@ -1037,6 +1085,21 @@ container.addEventListener('touchend', () => {
   if (wrapper) wrapper.style.transform = '';
   renderPdfPages();
 });
+
+// En móvil, resize se dispara al aparecer/ocultar la barra de URL aunque el
+// ancho no cambie; comparamos contra lastPdfBaseWidth para saltar esos casos.
+function onPdfViewportChange() {
+  if (!state.pdfDoc) return;
+  clearTimeout(pdfResizeDebounce);
+  pdfResizeDebounce = setTimeout(() => {
+    if (!state.pdfDoc) return;
+    const currentW = tabContent.clientWidth || (container.clientWidth - 32);
+    if (currentW === lastPdfBaseWidth || currentW === 0) return;
+    renderPdfPages();
+  }, 200);
+}
+window.addEventListener('resize', onPdfViewportChange);
+window.addEventListener('orientationchange', onPdfViewportChange);
 
 // ── Atajos de teclado (solo en lector) ────────────────────────────────────────
 document.addEventListener('keydown', (e) => {

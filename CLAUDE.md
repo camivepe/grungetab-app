@@ -21,14 +21,14 @@ TABS_FOLDER_ID=google_drive_folder_id
 ./dev.sh              # only generates index.local.html (open via WebStorm built-in server)
 ```
 
-`index.local.html` is generated from `index.html` with all three `__PLACEHOLDERS__` replaced. Never commit it.
+`index.local.html` and `config.local.js` are generated from `index.html` and `config.js` with the `__PLACEHOLDERS__` replaced, and `index.local.html` is rewritten to reference `config.local.js`. Never commit them.
 
 The Service Worker is intentionally disabled on `localhost` — it only activates in production.
 
 ## Deployment
 
 Merging to `main` triggers GitHub Actions (`.github/workflows/deploy.yml`), which injects values into source files and deploys to GitHub Pages:
-- `index.html` receives three GitHub secrets: `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL`, `TABS_FOLDER_ID`
+- `config.js` receives three GitHub secrets: `GOOGLE_CLIENT_ID`, `ALLOWED_EMAIL`, `TABS_FOLDER_ID`. `index.html` also receives `GOOGLE_CLIENT_ID` for the `g_id_onload` attribute.
 - `sw.js` receives `$(git rev-parse --short HEAD)` as `__CACHE_VERSION__`, so each deploy gets a unique cache name (e.g. `grungetab-a1b2c3d`) and the browser discards stale cached assets automatically.
 
 ## Access control
@@ -39,8 +39,9 @@ The app is locked to a single user via two layers:
 
 ## Architecture
 
-The app is entirely self-contained in four files:
-- `index.html` — three screens in one HTML file: `#screen-login`, `#screen-list`, `#screen-reader`. Contains a `<script>` block that sets `window.GRUNGETAB_CONFIG` with the three injected values.
+The app is entirely self-contained in five files:
+- `index.html` — three screens in one HTML file: `#screen-login`, `#screen-list`, `#screen-reader`. Loads `config.js` before `app.js`.
+- `config.js` — sets `window.GRUNGETAB_CONFIG` with the three injected values. Committed with `__PLACEHOLDERS__`; values are injected by `dev.sh` (as `config.local.js`) or by the deploy workflow (in-place).
 - `app.js` — all application logic (auth, Drive API, rendering, scroll engine)
 - `style.css` — theming via CSS custom properties on `body.dark` / `body.light`
 - `sw.js` — service worker for offline caching

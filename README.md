@@ -116,6 +116,9 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **`access_token` en URL de imágenes (seguridad)** — `resolveAuthImages` (app.js:655) mete el token como query param. Se filtra a Referer, historial y logs. Reemplazar por `fetch` con `Authorization` header + `URL.createObjectURL(blob)`.
 - [x] **Soporte del botón Atrás del navegador/Android (UX)** — hoy cierra la app en vez de volver a la lista. Usar `history.pushState` al cambiar de pantalla y escuchar `popstate`.
 - [x] **CSP vía `<meta http-equiv>` (seguridad)** — defensa en profundidad contra XSS. Restringir `script-src`, `connect-src`, `img-src` a los orígenes reales (Google, cdnjs). _(Nota: sigue usando `'unsafe-inline'` en `script-src` porque el bloque de `window.GRUNGETAB_CONFIG` está inline en `index.html`. Mover a `config.js` separado permitiría endurecerlo — TODO aparte.)_
+- [x] **Eliminar `'unsafe-inline'` del CSP (seguridad)** — mover el bloque `window.GRUNGETAB_CONFIG` de `index.html:17-23` a un `config.js` externo (generado por `dev.sh` y por el workflow de deploy). Permite quitar `'unsafe-inline'` de `script-src` y cerrar el hueco de XSS que queda hoy.
+- [x] **Imágenes de Google Docs offline (UX)** — en modo offline los `contentUri` de Google (`<img>` en docs) fallan por red y `resolveAuthImages` no puede recuperarlas porque tampoco hay acceso a la Drive API. Opción: al cachear el doc, fetchear sus imágenes y guardarlas en `OFFLINE_CACHE` como blobs, reemplazando `src` al renderizar offline.
+- [x] **Re-render del PDF al rotar/resize (UX)** — `renderPdfPages` usa `tabContent.clientWidth` una vez, pero al rotar el dispositivo o cambiar el tamaño de la ventana los canvas quedan con el ancho viejo (se ven pequeños o cortados). Escuchar `resize`/`orientationchange` con debounce y re-renderizar si `state.pdfDoc`.
 
 ### Media prioridad
 
@@ -126,6 +129,14 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **Pinch-to-zoom en PDFs (UX)** — hoy solo +/− con botones. Agregar gesto con `touchstart`/`touchmove` o CSS `touch-action: pinch-zoom`.
 - [x] **Notificar updates del SW (UX)** — cuando se active un SW nuevo, mostrar un toast "Nueva versión disponible · Recargar" en vez de esperar a que el usuario descubra que hay cambios.
 - [x] **Escape del `src` de imágenes (seguridad)** — en `renderParagraph` (app.js:447) se inyecta `src` sin escapar. Riesgo bajo (viene de la API de Google) pero fácil de cerrar con `escapeHtml`.
+- [ ] **`reloadCurrentFile()` duplica el historial (UX)** — al pulsar ↺ se vuelve a llamar a `openDoc/openTxt/openPdf`, que hacen `history.pushState` de nuevo. Cada reload agrega una entrada extra y el botón Atrás termina recorriendo reloads viejos. Saltar el `pushState` cuando el id/type ya coincide con la entrada actual del history.
+- [ ] **Liberar `state.currentDoc` y `state.pdfDoc` al salir del reader (perf)** — hoy quedan retenidos entre aperturas (un JSON grande de Docs o un `PDFDocumentProxy` de varios MB). Limpiarlos al entrar a `screen-list` o al abrir un archivo de otro tipo.
+- [ ] **Límite al cache offline (perf/quota)** — `OFFLINE_CACHE` crece sin bound. PDFs de varios MB se acumulan hasta hitar la cuota del origen y romper el resto del cache. Implementar LRU simple (e.g. guardar timestamps en IndexedDB y purgar más allá de N archivos o X MB).
+- [ ] **Botón "Limpiar caché offline" en ajustes (UX)** — complemento del límite automático: permitir al usuario purgar manualmente desde el panel de ajustes sin tener que ir a DevTools.
+- [ ] **Indicador global de modo offline (UX)** — hoy solo se ve `· OFFLINE` en el badge del reader si abrís un archivo cacheado. Si el usuario está en la lista sin red, ve "Error cargando" sin saber que es por estar offline. Escuchar `online`/`offline` y mostrar un pill persistente.
+- [ ] **Badge `OFFLINE` queda stale al volver la red (UX)** — si abriste un archivo desde cache y luego recuperás conexión, el badge sigue diciendo `DOC · OFFLINE`. Volver a `DOC` cuando `navigator.onLine` pasa a true (o actualizar al recargar con ↺).
+- [ ] **Persistir `state.pdfScale` (UX)** — `fontSize`, `theme` y `noWrap` persisten en localStorage; el zoom de PDF no. Abrir un PDF siempre lo resetea a 100%. Guardar en `grungetab-pdfscale` y restaurarlo en `openPdf`.
+- [ ] **Búsqueda accent-insensitive (UX)** — `applySearch` hace `includes()` case-insensitive pero no normaliza diacríticos: buscar "cancion" no matchea "Canción". Usar `String.prototype.normalize('NFD').replace(/\p{Diacritic}/gu, '')` en ambos lados.
 
 ### Baja prioridad
 
@@ -135,4 +146,10 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **Cachear `loadPins()`/`loadRecents()` en memoria (perf)** — hoy se parsean desde localStorage en cada `renderItems`. Mantener una copia en `state` e invalidar en `togglePin`/`addRecent`.
 - [x] **Mover `doc_current` a `state` (calidad)** — variable module-level mutable (app.js:487), inconsistente con el resto del estado.
 - [x] **Búsqueda recursiva entre carpetas (UX)** — hoy el buscador solo filtra la carpeta actual.
-
+- [ ] **Race condition en `refreshToken()` (calidad)** — si dos `authFetch` reciben 401 en paralelo, ambos disparan `refreshToken()` y se inician dos flujos OAuth simultáneos (`app.js:802`). Compartir un `refreshPromise` mientras haya uno en curso.
+- [ ] **Limpieza del `.gitignore` (calidad)** — el `.gitignore` incluye `dev.sh`, pero `dev.sh` está tracked en el repo (y referenciado por `README.md` y `CLAUDE.md`). La línea no tiene efecto porque git no ignora archivos ya rastreados, pero es confuso. Removerla.
+- [ ] **Toggle para `filter: invert(1)` en imágenes dark (UX)** — `style.css:368` invierte todas las imágenes en modo oscuro. Útil para tablaturas escaneadas b/n, pero destruye imágenes con color (diagramas de acordes coloreados, fotos). Agregar un toggle en ajustes o detectar imágenes ya oscuras.
+- [ ] **Saltar entre secciones del doc (UX)** — para canciones largas con coros/estrofas marcadas como `<h2>`/`<h3>`, un par de botones ⏮/⏭ (o atajos Home/End, PgUp/PgDn) que muevan a la siguiente heading ayudaría a no perder el lugar en vivo.
+- [ ] **Indicación visual de "Fin del documento" (UX)** — cuando el auto-scroll llega al final, `pause()` se ejecuta silenciosamente y el usuario solo ve que el scroll se detuvo. Un flash corto en el badge o un indicador pequeño aclararía que no es un freeze.
+- [ ] **Detectar home con el "Atrás"/"Escape"** Cuando ya esté en la raíz/home no hacer más atrás para que nos se salga de la aplicación
+- [ ] **Quitar elementos de "Recientes" + límite a pins (UX)** — el botón 📌 ya hace toggle (un-pin funciona) pero no hay forma de borrar de "Recientes" salvo esperar a que caigan por el `RECENTS_MAX = 10`. Agregar un ✕ al hover/long-press en cada item de Recientes. Además, `savePins` no tiene tope (`app.js:196`), conviene un `PINS_MAX` (~20) para evitar que la sección crezca sin control.

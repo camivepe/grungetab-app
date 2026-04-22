@@ -9,6 +9,8 @@ set -e
 ENV_FILE=".env.local"
 SOURCE="index.html"
 OUTPUT="index.local.html"
+CONFIG_SOURCE="config.js"
+CONFIG_OUTPUT="config.local.js"
 PORT=8080
 
 if [ ! -f "$ENV_FILE" ]; then
@@ -35,9 +37,15 @@ TABS_FOLDER_ID=$(read_env TABS_FOLDER_ID)
 sed -e "s|__GOOGLE_CLIENT_ID__|$CLIENT_ID|g" \
     -e "s|__ALLOWED_EMAIL__|$ALLOWED_EMAIL|g" \
     -e "s|__TABS_FOLDER_ID__|$TABS_FOLDER_ID|g" \
+    -e "s|src=\"$CONFIG_SOURCE\"|src=\"$CONFIG_OUTPUT\"|g" \
     "$SOURCE" > "$OUTPUT"
 
-echo "✅  $OUTPUT generado"
+sed -e "s|__GOOGLE_CLIENT_ID__|$CLIENT_ID|g" \
+    -e "s|__ALLOWED_EMAIL__|$ALLOWED_EMAIL|g" \
+    -e "s|__TABS_FOLDER_ID__|$TABS_FOLDER_ID|g" \
+    "$CONFIG_SOURCE" > "$CONFIG_OUTPUT"
+
+echo "✅  $OUTPUT + $CONFIG_OUTPUT generados"
 
 if [ "$1" == "--serve" ]; then
   echo "🌐  Servidor en http://localhost:$PORT/$OUTPUT"

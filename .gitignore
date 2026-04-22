@@ -14,5 +14,6 @@ yarn-error.log*
 .env.local
 dev.sh
 
-# Archivo generado por dev.sh (nunca subir a GitHub)
+# Archivos generados por dev.sh (nunca subir a GitHub)
 index.local.html
+config.local.js

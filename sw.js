@@ -11,6 +11,7 @@ const ASSETS = [
   '/index.html',
   '/style.css',
   '/app.js',
+  '/config.js',
   '/manifest.json',
 ];
 
