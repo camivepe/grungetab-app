@@ -119,13 +119,13 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 
 ### Media prioridad
 
-- [ ] **Atajos de teclado (UX)** — Espacio = play/pausa, ↑/↓ = velocidad, +/− = fuente, Esc = volver. Útil en tablet/laptop con teclado Bluetooth.
-- [ ] **Render lazy del PDF (perf)** — `renderPdfPages` renderiza todas las páginas de forma secuencial con `await` (app.js:576). Para PDFs largos bloquea segundos. Renderizar solo páginas visibles con `IntersectionObserver`.
-- [ ] **Actualizar PDF.js (seguridad)** — versión 3.11.174 (2023). Subir a la última 4.x y regenerar SRI.
-- [ ] **Retry en errores de carga (UX)** — hoy el mensaje de error es un callejón sin salida. Agregar botón "Reintentar" en el mensaje de `loadFolder`, `openDoc`, etc.
-- [ ] **Pinch-to-zoom en PDFs (UX)** — hoy solo +/− con botones. Agregar gesto con `touchstart`/`touchmove` o CSS `touch-action: pinch-zoom`.
-- [ ] **Notificar updates del SW (UX)** — cuando se active un SW nuevo, mostrar un toast "Nueva versión disponible · Recargar" en vez de esperar a que el usuario descubra que hay cambios.
-- [ ] **Escape del `src` de imágenes (seguridad)** — en `renderParagraph` (app.js:447) se inyecta `src` sin escapar. Riesgo bajo (viene de la API de Google) pero fácil de cerrar con `escapeHtml`.
+- [x] **Atajos de teclado (UX)** — Espacio = play/pausa, ↑/↓ = velocidad, +/− = fuente, Esc = volver. Útil en tablet/laptop con teclado Bluetooth.
+- [x] **Render lazy del PDF (perf)** — `renderPdfPages` renderiza todas las páginas de forma secuencial con `await` (app.js:576). Para PDFs largos bloquea segundos. Renderizar solo páginas visibles con `IntersectionObserver`.
+- [x] **Actualizar PDF.js (seguridad)** — versión 3.11.174 (2023). Subir a la última 4.x y regenerar SRI.
+- [x] **Retry en errores de carga (UX)** — hoy el mensaje de error es un callejón sin salida. Agregar botón "Reintentar" en el mensaje de `loadFolder`, `openDoc`, etc.
+- [x] **Pinch-to-zoom en PDFs (UX)** — hoy solo +/− con botones. Agregar gesto con `touchstart`/`touchmove` o CSS `touch-action: pinch-zoom`.
+- [x] **Notificar updates del SW (UX)** — cuando se active un SW nuevo, mostrar un toast "Nueva versión disponible · Recargar" en vez de esperar a que el usuario descubra que hay cambios.
+- [x] **Escape del `src` de imágenes (seguridad)** — en `renderParagraph` (app.js:447) se inyecta `src` sin escapar. Riesgo bajo (viene de la API de Google) pero fácil de cerrar con `escapeHtml`.
 
 ### Baja prioridad
 

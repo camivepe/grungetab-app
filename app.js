@@ -311,7 +311,8 @@ async function loadFolder(folderId, folderName) {
     renderItems(items);
 
   } catch (err) {
-    docList.innerHTML = `<div id="list-error">Error cargando.<br><small>${err.message}</small></div>`;
+    docList.innerHTML = `<div id="list-error">Error cargando.<br><small>${err.message}</small><br><button id="btn-retry-folder" style="margin-top:12px">Reintentar</button></div>`;
+    document.getElementById('btn-retry-folder')?.addEventListener('click', () => loadFolder(folderId, folderName));
   }
 }
 
@@ -488,7 +489,7 @@ function renderParagraph(para) {
         const src = props?.imageProperties?.contentUri
                  || props?.imageProperties?.sourceUri;
         if (src) {
-          line += `<img src="${src}" alt="imagen" data-original-src="${src}" />`;
+          line += `<img src="${escapeHtml(src)}" alt="imagen" data-original-src="${escapeHtml(src)}" />`;
         }
       }
     }
@@ -562,7 +563,8 @@ async function openDoc(docId, docName) {
       fileTypeBadge.textContent = 'DOC · OFFLINE';
       return;
     }
-    tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el documento.<br><small>${err.message}</small></p>`;
+    tabContent.innerHTML = `<div style="padding:16px;color:#e57373">Error cargando el documento.<br><small>${err.message}</small><br><button id="btn-retry-content" style="margin-top:12px;color:inherit">Reintentar</button></div>`;
+    document.getElementById('btn-retry-content')?.addEventListener('click', () => openDoc(docId, docName));
   }
 }
 
@@ -592,30 +594,28 @@ async function openTxt(fileId, fileName) {
       fileTypeBadge.textContent = 'TXT · OFFLINE';
       return;
     }
-    tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el archivo.<br><small>${err.message}</small></p>`;
+    tabContent.innerHTML = `<div style="padding:16px;color:#e57373">Error cargando el archivo.<br><small>${err.message}</small><br><button id="btn-retry-content" style="margin-top:12px;color:inherit">Reintentar</button></div>`;
+    document.getElementById('btn-retry-content')?.addEventListener('click', () => openTxt(fileId, fileName));
   }
 }
 
 // ── PDF viewer ────────────────────────────────────────────────────────────────
-const PDFJS_CDN    = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-const PDFJS_SRI    = 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e';
+const PDFJS_CDN    = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+const PDFJS_SRI    = 'sha384-+0ti2moQlmLN7WZHE2RHIf5lV8hHxhxEalN0il3YZceG26fUPyOkR0hp9daxk1i7';
 
 function loadPdfJs() {
   if (window.pdfjsLib) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src               = PDFJS_CDN;
-    script.integrity         = PDFJS_SRI;
-    script.crossOrigin       = 'anonymous';
-    script.referrerPolicy    = 'no-referrer';
-    script.onload = () => {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-      resolve();
-    };
-    script.onerror = () => reject(new Error('No se pudo cargar PDF.js'));
-    document.head.appendChild(script);
-  });
+  const preload = document.createElement('link');
+  preload.rel = 'modulepreload';
+  preload.href = PDFJS_CDN;
+  preload.integrity = PDFJS_SRI;
+  preload.crossOrigin = 'anonymous';
+  document.head.appendChild(preload);
+  return import(PDFJS_CDN).then(mod => {
+    window.pdfjsLib = mod;
+    mod.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  }).catch(() => { throw new Error('No se pudo cargar PDF.js'); });
 }
 
 // Muestra u oculta controles según el tipo de archivo abierto
@@ -629,17 +629,22 @@ function updateZoomLabel() {
   zoomLabel.textContent = Math.round(state.pdfScale * 100) + '%';
 }
 
-// Renderiza todas las páginas del PDF almacenado en state.pdfDoc
+// Renderiza las páginas del PDF de forma lazy: primero crea canvas con las
+// dimensiones correctas (placeholders), luego renderiza solo las páginas
+// visibles (+ 300px de margen) usando IntersectionObserver.
 async function renderPdfPages() {
+  if (pdfPageObserver) { pdfPageObserver.disconnect(); pdfPageObserver = null; }
+
   const pdf = state.pdfDoc;
   const prevScrollTop = container.scrollTop;
+  const baseW = tabContent.clientWidth || (container.clientWidth - 32);
 
   const wrapper = document.createElement('div');
   wrapper.className = 'pdf-rendered';
   tabContent.innerHTML = '';
   tabContent.appendChild(wrapper);
 
-  const baseW = tabContent.clientWidth || (container.clientWidth - 32);
+  const pageEntries = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page      = await pdf.getPage(pageNum);
@@ -650,17 +655,35 @@ async function renderPdfPages() {
     const canvas = document.createElement('canvas');
     canvas.width  = viewport.width;
     canvas.height = viewport.height;
-    // Ancho fijo en px para que el zoom > 1 desborde y genere scroll horizontal
     canvas.style.cssText = `width:${viewport.width}px;max-width:none;display:block;margin-bottom:${pageNum < pdf.numPages ? '8' : '120'}px;`;
+    canvas.dataset.pageIdx  = pageEntries.length;
+    canvas.dataset.rendered = '0';
 
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     wrapper.appendChild(canvas);
+    pageEntries.push({ canvas, page, viewport });
   }
 
   container.scrollTop = prevScrollTop;
+
+  pdfPageObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const cvs = entry.target;
+      if (cvs.dataset.rendered === '1') continue;
+      cvs.dataset.rendered = '1';
+      pdfPageObserver.unobserve(cvs);
+      const { page, viewport } = pageEntries[Number(cvs.dataset.pageIdx)];
+      page.render({ canvasContext: cvs.getContext('2d'), viewport }).promise.catch(() => {});
+    }
+  }, { root: container, rootMargin: '300px' });
+
+  for (const { canvas } of pageEntries) {
+    pdfPageObserver.observe(canvas);
+  }
 }
 
 let pdfZoomDebounce = null;
+let pdfPageObserver = null;
 
 async function setPdfZoom(delta) {
   if (!state.pdfDoc) return;
@@ -719,7 +742,8 @@ async function openPdf(fileId, fileName) {
       }
     } catch { /* PDF.js falló al cargar offline — cae al mensaje de error */ }
     state.pdfDoc = null;
-    tabContent.innerHTML = `<p style="padding:16px;color:#e57373">Error cargando el PDF.<br><small>${err.message}</small></p>`;
+    tabContent.innerHTML = `<div style="padding:16px;color:#e57373">Error cargando el PDF.<br><small>${err.message}</small><br><button id="btn-retry-content" style="margin-top:12px;color:inherit">Reintentar</button></div>`;
+    document.getElementById('btn-retry-content')?.addEventListener('click', () => openPdf(fileId, fileName));
   }
 }
 
@@ -953,10 +977,94 @@ document.addEventListener('touchstart', () => {
   }
 }, { passive: true });
 
+// ── Pinch-to-zoom para PDFs ───────────────────────────────────────────────────
+let pinchState = null; // { startDist, startScale }
+
+container.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2 && state.pdfDoc) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    pinchState = { startDist: Math.hypot(dx, dy), startScale: state.pdfScale };
+  }
+}, { passive: true });
+
+container.addEventListener('touchmove', (e) => {
+  if (e.touches.length !== 2 || !pinchState || !state.pdfDoc) return;
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  const ratio = Math.hypot(dx, dy) / pinchState.startDist;
+  state.pdfScale = Math.max(0.5, Math.min(3.0, pinchState.startScale * ratio));
+  updateZoomLabel();
+  const wrapper = tabContent.querySelector('.pdf-rendered');
+  if (wrapper) {
+    wrapper.style.transformOrigin = 'top left';
+    wrapper.style.transform = `scale(${ratio})`;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+container.addEventListener('touchend', () => {
+  if (!pinchState || !state.pdfDoc) return;
+  pinchState = null;
+  const wrapper = tabContent.querySelector('.pdf-rendered');
+  if (wrapper) wrapper.style.transform = '';
+  renderPdfPages();
+});
+
+// ── Atajos de teclado (solo en lector) ────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (document.activeElement?.tagName === 'INPUT') return;
+  if (screenReader.classList.contains('hidden')) return;
+  switch (e.key) {
+    case ' ':
+      e.preventDefault();
+      togglePlay();
+      showControls();
+      scheduleHide();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      changeSpeed(+1);
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      changeSpeed(-1);
+      break;
+    case '+':
+    case '=':
+      applyFontSize(Math.min(4, state.fontSize + 1));
+      showControls();
+      scheduleHide();
+      break;
+    case '-':
+      applyFontSize(Math.max(1, state.fontSize - 1));
+      showControls();
+      scheduleHide();
+      break;
+    case 'Escape':
+      history.back();
+      break;
+  }
+});
+
+// ── Toast de actualización del SW ─────────────────────────────────────────────
+function showSwUpdateToast() {
+  if (document.getElementById('sw-update-toast')) return;
+  const toast = document.createElement('div');
+  toast.id = 'sw-update-toast';
+  toast.innerHTML = '<span>Nueva versión disponible</span><button id="btn-sw-reload">Recargar</button>';
+  document.body.appendChild(toast);
+  document.getElementById('btn-sw-reload').addEventListener('click', () => location.reload());
+}
+
 // ── Service Worker (solo en producción) ───────────────────────────────────────
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
   window.addEventListener('load', () => {
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW:', err));
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController) showSwUpdateToast();
+    });
   });
 }
 
