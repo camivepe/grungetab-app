@@ -632,6 +632,27 @@ button:hover, button:active {
   margin: 0;
 }
 
+/* ── OFFLINE PILL ── */
+#offline-pill {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(180, 80, 80, 0.92);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  z-index: 300;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+#offline-pill.hidden {
+  display: none;
+}
+
 /* ── SW UPDATE TOAST ── */
 #sw-update-toast {
   position: fixed;

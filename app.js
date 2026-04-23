@@ -92,6 +92,7 @@ const zoomControl    = document.getElementById('zoom-control');
 const zoomLabel      = document.getElementById('zoom-label');
 const btnZoomIn      = document.getElementById('btn-zoom-in');
 const btnZoomOut     = document.getElementById('btn-zoom-out');
+const offlinePill    = document.getElementById('offline-pill');
 
 // ── Navegación entre pantallas ────────────────────────────────────────────────
 function showScreen(name) {
@@ -1188,6 +1189,20 @@ document.addEventListener('keydown', (e) => {
       break;
   }
 });
+
+// ── Indicador de modo offline ─────────────────────────────────────────────────
+function syncOfflineIndicator() {
+  const online = navigator.onLine;
+  offlinePill.classList.toggle('hidden', online);
+  if (online) {
+    // Badge vuelve a "DOC"/"TXT"/"PDF" sin el sufijo OFFLINE. El contenido sigue
+    // siendo el cacheado hasta que el usuario recargue con ↺.
+    fileTypeBadge.textContent = fileTypeBadge.textContent.replace(/\s*·\s*OFFLINE$/, '');
+  }
+}
+window.addEventListener('online',  syncOfflineIndicator);
+window.addEventListener('offline', syncOfflineIndicator);
+syncOfflineIndicator();
 
 // ── Toast de actualización del SW ─────────────────────────────────────────────
 function showSwUpdateToast() {
