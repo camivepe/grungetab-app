@@ -93,6 +93,7 @@ const zoomLabel      = document.getElementById('zoom-label');
 const btnZoomIn      = document.getElementById('btn-zoom-in');
 const btnZoomOut     = document.getElementById('btn-zoom-out');
 const offlinePill    = document.getElementById('offline-pill');
+const btnClearCache  = document.getElementById('btn-clear-cache');
 
 // ── Navegación entre pantallas ────────────────────────────────────────────────
 function showScreen(name) {
@@ -939,10 +940,39 @@ async function driveGet(url) {
 // Guarda en Cache API las respuestas de docs/txt/pdf ya cargados para poder
 // abrirlos sin red. El cache 'grungetab-offline-files' no lleva version hash:
 // el SW lo preserva entre deploys (ver sw.js).
-const OFFLINE_CACHE = 'grungetab-offline-files';
+const OFFLINE_CACHE     = 'grungetab-offline-files';
+const OFFLINE_INDEX_KEY = 'grungetab-offline-index';
+const OFFLINE_MAX_FILES = 30;
 
 function offlineKey(type, id) {
   return `/offline/${type}/${encodeURIComponent(id)}`;
+}
+
+// Índice LRU en localStorage: array de { type, id, ts }, ordenado por ts (más viejo primero).
+// El cache API por sí solo no permite ordenar por fecha de inserción ni iterar eficiente.
+function loadOfflineIndex() {
+  try { return JSON.parse(localStorage.getItem(OFFLINE_INDEX_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveOfflineIndex(idx) {
+  localStorage.setItem(OFFLINE_INDEX_KEY, JSON.stringify(idx));
+}
+function touchOfflineIndex(type, id) {
+  const idx = loadOfflineIndex().filter(e => !(e.type === type && e.id === id));
+  idx.push({ type, id, ts: Date.now() });
+  saveOfflineIndex(idx);
+  return idx;
+}
+
+// Borra el archivo cacheado. Si es un doc, también borra sus imágenes asociadas.
+async function evictOffline(cache, entry) {
+  await cache.delete(offlineKey(entry.type, entry.id));
+  if (entry.type === 'doc') {
+    const prefix = `/offline/doc-image/${encodeURIComponent(entry.id)}/`;
+    for (const req of await cache.keys()) {
+      if (new URL(req.url).pathname.startsWith(prefix)) await cache.delete(req);
+    }
+  }
 }
 
 async function saveOffline(type, id, response) {
@@ -950,6 +980,11 @@ async function saveOffline(type, id, response) {
   try {
     const cache = await caches.open(OFFLINE_CACHE);
     await cache.put(offlineKey(type, id), response.clone());
+    let idx = touchOfflineIndex(type, id);
+    while (idx.length > OFFLINE_MAX_FILES) {
+      await evictOffline(cache, idx.shift());
+    }
+    saveOfflineIndex(idx);
   } catch {
     // quota exceeded, modo incógnito, etc. — silencioso
   }
@@ -959,10 +994,19 @@ async function loadOffline(type, id) {
   if (!('caches' in window)) return null;
   try {
     const cache = await caches.open(OFFLINE_CACHE);
-    return await cache.match(offlineKey(type, id));
+    const res = await cache.match(offlineKey(type, id));
+    if (res) touchOfflineIndex(type, id); // marca como usado recientemente
+    return res;
   } catch {
     return null;
   }
+}
+
+async function clearOfflineCache() {
+  try {
+    if ('caches' in window) await caches.delete(OFFLINE_CACHE);
+  } catch { /* silencioso */ }
+  localStorage.removeItem(OFFLINE_INDEX_KEY);
 }
 
 // ── Helper: escape HTML ───────────────────────────────────────────────────────
@@ -1076,6 +1120,13 @@ btnSpeedDown.addEventListener('click', (e) => { e.stopPropagation(); changeSpeed
 btnSpeedUp.addEventListener('click',   (e) => { e.stopPropagation(); changeSpeed(+1); });
 btnFontDown.addEventListener('click',  (e) => { e.stopPropagation(); applyFontSize(Math.max(1, state.fontSize - 1)); showControls(); scheduleHide(); });
 btnFontUp.addEventListener('click',    (e) => { e.stopPropagation(); applyFontSize(Math.min(4, state.fontSize + 1)); showControls(); scheduleHide(); });
+btnClearCache?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (!confirm('¿Borrar todos los archivos cacheados para uso offline?')) return;
+  await clearOfflineCache();
+  btnClearCache.textContent = '✓ Caché limpiada';
+  setTimeout(() => { btnClearCache.textContent = '🧹 Limpiar caché offline'; }, 1500);
+});
 btnSettings.addEventListener('click',  (e) => {
   e.stopPropagation();
   const open = settingsPanel.classList.toggle('hidden') === false;

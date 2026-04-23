@@ -565,6 +565,20 @@ button:hover, button:active {
   background: var(--btn-hover);
 }
 
+/* ── CLEAR CACHE ── */
+#cache-control {
+  display: flex;
+  justify-content: center;
+}
+#btn-clear-cache {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  opacity: 0.7;
+}
+#btn-clear-cache:hover {
+  opacity: 1;
+}
+
 /* ── ZOOM PDF ── */
 #zoom-control {
   display: flex;
