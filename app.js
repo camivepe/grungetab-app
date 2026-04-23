@@ -248,6 +248,11 @@ function initOAuthClient(silent = false, loginHint = '') {
     state.accessToken = tokenResponse.access_token;
     state.folderStack = [];
     showScreen('list');
+    // Pusheamos una entry "home" para que el primer Atrás desde home dispare
+    // popstate (donde lo atrapamos) en vez de salir al navegador.
+    if (history.state?.folder !== 'home') {
+      history.pushState({ screen: 'list', folder: 'home' }, '');
+    }
     loadFolder(CONFIG.tabsFolderId, 'GrungeTab');
   };
 
@@ -344,17 +349,41 @@ function navigateUp() {
   loadFolder(parent.id, parent.name);
 }
 
+// Solo pushea una entry nueva si aún no estamos en ese reader. Así reloadCurrentFile
+// (que re-llama openDoc/openTxt/openPdf) no duplica entries del history.
+function pushReaderState(id) {
+  if (history.state?.screen === 'reader' && history.state?.id === id) return;
+  history.pushState({ screen: 'reader', id }, '');
+}
+
+// Libera el estado pesado del reader (JSON de Docs, PDFDocumentProxy con
+// sus workers) al salir. Se llama en las transiciones reader → list.
+function cleanupReaderState() {
+  if (state.pdfDoc) {
+    try { state.pdfDoc.destroy(); } catch {}
+    state.pdfDoc = null;
+  }
+  state.currentDoc  = null;
+  state.currentFile = null;
+}
+
 // Historial: el botón Atrás del navegador/Android vuelve a la lista o sube de
 // carpeta en vez de salir de la app. Los botones internos disparan history.back()
 // y el resto lo maneja este handler.
 window.addEventListener('popstate', () => {
   if (!screenReader.classList.contains('hidden')) {
     pause();
+    cleanupReaderState();
     showScreen('list');
     return;
   }
-  if (!screenList.classList.contains('hidden') && state.folderStack.length > 0) {
-    navigateUp();
+  if (!screenList.classList.contains('hidden')) {
+    if (state.folderStack.length > 0) {
+      navigateUp();
+    } else {
+      // Home: re-pusheamos para atrapar el Atrás y no salir de la app.
+      history.pushState({ screen: 'list', folder: 'home' }, '');
+    }
   }
 });
 
@@ -570,7 +599,7 @@ async function openDoc(docId, docName) {
   fileTypeBadge.textContent = 'DOC';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
   setFileTypeControls('doc');
-  history.pushState({ screen: 'reader', id: docId }, '');
+  pushReaderState(docId);
   showScreen('reader');
   container.scrollTop = 0;
   pause();
@@ -609,7 +638,7 @@ async function openTxt(fileId, fileName) {
   fileTypeBadge.textContent = 'TXT';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando...</p>';
   setFileTypeControls('txt');
-  history.pushState({ screen: 'reader', id: fileId }, '');
+  pushReaderState(fileId);
   showScreen('reader');
   container.scrollTop = 0;
   pause();
@@ -757,7 +786,7 @@ async function openPdf(fileId, fileName) {
   songTitle.textContent     = fileName;
   fileTypeBadge.textContent = 'PDF';
   tabContent.innerHTML      = '<p style="padding:16px;opacity:.5">Cargando PDF...</p>';
-  history.pushState({ screen: 'reader', id: fileId }, '');
+  pushReaderState(fileId);
   showScreen('reader');
   container.scrollTop = 0;
   pause();
