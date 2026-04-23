@@ -13,6 +13,7 @@ const FONT_SIZES   = { 1: 0.78, 2: 0.88, 3: 1.05, 4: 1.25 };
 const FONT_LABELS  = { 1: 'S',  2: 'M',  3: 'L',  4: 'XL' };
 
 const RECENTS_MAX = 10;
+const PINS_MAX    = 20;
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -43,6 +44,9 @@ const state = {
   // Archivo actualmente abierto en el reader
   currentFile: null, // {id, name, type: 'doc'|'txt'|'pdf'}
   currentDoc:  null, // documento Google Docs actualmente cargado
+
+  // Invertir imágenes en modo oscuro
+  invertImages: true,
 
   // Caché en memoria de localStorage (invalidar en savePins/saveRecents)
   pins:    [],
@@ -92,8 +96,12 @@ const zoomControl    = document.getElementById('zoom-control');
 const zoomLabel      = document.getElementById('zoom-label');
 const btnZoomIn      = document.getElementById('btn-zoom-in');
 const btnZoomOut     = document.getElementById('btn-zoom-out');
-const offlinePill    = document.getElementById('offline-pill');
-const btnClearCache  = document.getElementById('btn-clear-cache');
+const offlinePill      = document.getElementById('offline-pill');
+const btnClearCache    = document.getElementById('btn-clear-cache');
+const btnInvertImgs    = document.getElementById('btn-invert-imgs');
+const invertControl    = document.getElementById('invert-control');
+const btnPrevSection   = document.getElementById('btn-prev-section');
+const btnNextSection   = document.getElementById('btn-next-section');
 
 // ── Navegación entre pantallas ────────────────────────────────────────────────
 function showScreen(name) {
@@ -170,10 +178,18 @@ function applyWrap(noWrap) {
   localStorage.setItem('grungetab-nowrap', noWrap ? '1' : '0');
 }
 
+function applyInvertImages(val) {
+  state.invertImages = val;
+  document.body.classList.toggle('no-invert-imgs', !val);
+  if (btnInvertImgs) btnInvertImgs.textContent = val ? '🖼 Invertir imágenes: ON' : '🖼 Invertir imágenes: OFF';
+  localStorage.setItem('grungetab-invertimgs', val ? '1' : '0');
+}
+
 function loadViewPrefs() {
   const size = parseInt(localStorage.getItem('grungetab-fontsize'), 10);
   applyFontSize(size >= 1 && size <= 4 ? size : 2);
   applyWrap(localStorage.getItem('grungetab-nowrap') === '1');
+  applyInvertImages(localStorage.getItem('grungetab-invertimgs') !== '0');
 }
 
 // ── Recientes y Fijados ───────────────────────────────────────────────────────
@@ -203,8 +219,12 @@ function togglePin(item) {
   const pins = state.pins.slice();
   const idx  = pins.findIndex(p => p.id === item.id);
   if (idx >= 0) pins.splice(idx, 1);
-  else pins.push(item);
+  else if (pins.length < PINS_MAX) pins.push(item);
   savePins(pins);
+}
+
+function removeRecent(id) {
+  saveRecents(state.recents.filter(x => x.id !== id));
 }
 
 // ── Auth: Google Identity Services ────────────────────────────────────────────
@@ -397,7 +417,7 @@ function renderQuickAccess(pinIds) {
   if (pins.length === 0 && recents.length === 0) return '';
 
   const icons = { doc: '📄', txt: '🎸', pdf: '📕', folder: '📁' };
-  const itemHtml = (item) => {
+  const pinItemHtml = (item) => {
     const pinned = pinIds.has(item.id);
     return `
       <div class="doc-item quick-item"
@@ -412,13 +432,30 @@ function renderQuickAccess(pinIds) {
         <span class="doc-arrow">›</span>
       </div>`;
   };
+  const recentItemHtml = (item) => {
+    const pinned = pinIds.has(item.id);
+    return `
+      <div class="doc-item quick-item"
+           data-id="${item.id}"
+           data-name="${escapeHtml(item.name)}"
+           data-type="${item.type}">
+        <span class="doc-icon">${icons[item.type] || '📄'}</span>
+        <div class="doc-info"><div class="doc-name">${escapeHtml(item.name)}</div></div>
+        <button class="btn-pin${pinned ? ' pinned' : ''}"
+                data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${item.type}"
+                title="${pinned ? 'Quitar pin' : 'Fijar'}">📌</button>
+        <button class="btn-remove-recent"
+                data-id="${item.id}" title="Quitar de recientes">✕</button>
+        <span class="doc-arrow">›</span>
+      </div>`;
+  };
 
   let html = '';
   if (pins.length > 0) {
-    html += `<div class="quick-section"><div class="quick-section-header">Fijados</div>${pins.map(itemHtml).join('')}</div>`;
+    html += `<div class="quick-section"><div class="quick-section-header">Fijados</div>${pins.map(pinItemHtml).join('')}</div>`;
   }
   if (recents.length > 0) {
-    html += `<div class="quick-section"><div class="quick-section-header">Recientes</div>${recents.map(itemHtml).join('')}</div>`;
+    html += `<div class="quick-section"><div class="quick-section-header">Recientes</div>${recents.map(recentItemHtml).join('')}</div>`;
   }
   return html;
 }
@@ -464,6 +501,14 @@ function renderItems(items) {
     }).join('');
     docList.innerHTML = html;
   }
+
+  docList.querySelectorAll('.btn-remove-recent').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeRecent(btn.dataset.id);
+      applySearch();
+    });
+  });
 
   docList.querySelectorAll('.doc-item').forEach(el => {
     const pinBtn = el.querySelector('.btn-pin');
@@ -686,8 +731,25 @@ function loadPdfJs() {
 // Muestra u oculta controles según el tipo de archivo abierto
 function setFileTypeControls(type) {
   const isPdf = type === 'pdf';
+  const isDoc = type === 'doc';
   zoomControl.classList.toggle('hidden', !isPdf);
   btnWrap.classList.toggle('hidden', isPdf);
+  btnPrevSection.classList.toggle('hidden', !isDoc);
+  btnNextSection.classList.toggle('hidden', !isDoc);
+  invertControl.classList.toggle('hidden', !isDoc);
+}
+
+function jumpToSection(dir) {
+  const headings = [...tabContent.querySelectorAll('.doc-rendered h1, .doc-rendered h2, .doc-rendered h3')];
+  if (headings.length === 0) return;
+  const currentTop = container.scrollTop + 10;
+  if (dir > 0) {
+    const next = headings.find(h => h.offsetTop > currentTop);
+    if (next) container.scrollTo({ top: next.offsetTop - 64, behavior: 'smooth' });
+  } else {
+    const prev = [...headings].reverse().find(h => h.offsetTop < currentTop - 20);
+    if (prev) container.scrollTo({ top: prev.offsetTop - 64, behavior: 'smooth' });
+  }
 }
 
 function updateZoomLabel() {
@@ -1051,11 +1113,19 @@ function scrollStep(timestamp) {
 
   const maxScroll = container.scrollHeight - container.clientHeight;
   if (container.scrollTop >= maxScroll) {
+    flashEndOfDoc();
     pause();
     return;
   }
 
   state.rafId = requestAnimationFrame(scrollStep);
+}
+
+function flashEndOfDoc() {
+  fileTypeBadge.classList.remove('badge-flash');
+  void fileTypeBadge.offsetWidth; // fuerza reflow para reiniciar la animación
+  fileTypeBadge.classList.add('badge-flash');
+  fileTypeBadge.addEventListener('animationend', () => fileTypeBadge.classList.remove('badge-flash'), { once: true });
 }
 
 function changeSpeed(delta) {
@@ -1126,6 +1196,24 @@ btnClearCache?.addEventListener('click', async (e) => {
   await clearOfflineCache();
   btnClearCache.textContent = '✓ Caché limpiada';
   setTimeout(() => { btnClearCache.textContent = '🧹 Limpiar caché offline'; }, 1500);
+});
+btnInvertImgs?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  applyInvertImages(!state.invertImages);
+  showControls();
+  scheduleHide();
+});
+btnPrevSection?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  jumpToSection(-1);
+  showControls();
+  scheduleHide();
+});
+btnNextSection?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  jumpToSection(+1);
+  showControls();
+  scheduleHide();
 });
 btnSettings.addEventListener('click',  (e) => {
   e.stopPropagation();
@@ -1232,6 +1320,18 @@ document.addEventListener('keydown', (e) => {
       break;
     case '-':
       applyFontSize(Math.max(1, state.fontSize - 1));
+      showControls();
+      scheduleHide();
+      break;
+    case 'PageUp':
+      e.preventDefault();
+      jumpToSection(-1);
+      showControls();
+      scheduleHide();
+      break;
+    case 'PageDown':
+      e.preventDefault();
+      jumpToSection(+1);
       showControls();
       scheduleHide();
       break;
