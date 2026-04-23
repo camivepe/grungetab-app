@@ -12,7 +12,6 @@ yarn-error.log*
 
 # Configuración local (nunca subir a GitHub)
 .env.local
-dev.sh
 
 # Archivos generados por dev.sh (nunca subir a GitHub)
 index.local.html

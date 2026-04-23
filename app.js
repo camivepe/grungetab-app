@@ -460,11 +460,16 @@ function renderItems(items) {
 // ── Búsqueda (local inmediata + recursiva en Drive con debounce) ──────────────
 let searchDebounce = null;
 
+function normalizeForSearch(s) {
+  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
 function applySearch() {
   const q = searchInput.value.trim();
   clearTimeout(searchDebounce);
   if (!q) { renderItems(state.allItems); return; }
-  renderItems(state.allItems.filter(d => d.name.toLowerCase().includes(q.toLowerCase())));
+  const nq = normalizeForSearch(q);
+  renderItems(state.allItems.filter(d => normalizeForSearch(d.name).includes(nq)));
   searchDebounce = setTimeout(() => searchDrive(q), 400);
 }
 
@@ -717,9 +722,18 @@ let pdfPageObserver = null;
 let lastPdfBaseWidth = 0;
 let pdfResizeDebounce = null;
 
+function savePdfScale() {
+  localStorage.setItem('grungetab-pdfscale', String(state.pdfScale));
+}
+function loadPdfScale() {
+  const v = parseFloat(localStorage.getItem('grungetab-pdfscale'));
+  return Number.isFinite(v) ? Math.max(0.5, Math.min(3.0, v)) : 1.0;
+}
+
 async function setPdfZoom(delta) {
   if (!state.pdfDoc) return;
   state.pdfScale = Math.max(0.5, Math.min(3.0, state.pdfScale + delta));
+  savePdfScale();
   updateZoomLabel();
 
   // Feedback visual inmediato vía CSS transform sobre el wrapper existente
@@ -748,7 +762,7 @@ async function openPdf(fileId, fileName) {
   container.scrollTop = 0;
   pause();
   setFileTypeControls('pdf');
-  state.pdfScale = 1.0;
+  state.pdfScale = loadPdfScale();
   updateZoomLabel();
 
   try {
@@ -847,8 +861,12 @@ async function resolveOfflineImages(container, docId) {
 }
 
 // ── Helper: renovar token OAuth silenciosamente ───────────────────────────────
+// Si dos authFetch reciben 401 en paralelo, ambos comparten la misma promesa
+// en curso para evitar disparar dos flujos OAuth simultáneos.
+let refreshPromise = null;
 function refreshToken() {
-  return new Promise((resolve, reject) => {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id:      CONFIG.clientId,
       scope:          SCOPES,
@@ -857,7 +875,8 @@ function refreshToken() {
       error_callback: (e) => reject(new Error(e?.type || 'token_error')),
     });
     client.requestAccessToken();
-  });
+  }).finally(() => { refreshPromise = null; });
+  return refreshPromise;
 }
 
 // ── Helper: fetch autenticado con retry en 401 ────────────────────────────────
@@ -1081,6 +1100,7 @@ container.addEventListener('touchmove', (e) => {
 container.addEventListener('touchend', () => {
   if (!pinchState || !state.pdfDoc) return;
   pinchState = null;
+  savePdfScale();
   const wrapper = tabContent.querySelector('.pdf-rendered');
   if (wrapper) wrapper.style.transform = '';
   renderPdfPages();

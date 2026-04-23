@@ -135,8 +135,8 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [ ] **Botón "Limpiar caché offline" en ajustes (UX)** — complemento del límite automático: permitir al usuario purgar manualmente desde el panel de ajustes sin tener que ir a DevTools.
 - [ ] **Indicador global de modo offline (UX)** — hoy solo se ve `· OFFLINE` en el badge del reader si abrís un archivo cacheado. Si el usuario está en la lista sin red, ve "Error cargando" sin saber que es por estar offline. Escuchar `online`/`offline` y mostrar un pill persistente.
 - [ ] **Badge `OFFLINE` queda stale al volver la red (UX)** — si abriste un archivo desde cache y luego recuperás conexión, el badge sigue diciendo `DOC · OFFLINE`. Volver a `DOC` cuando `navigator.onLine` pasa a true (o actualizar al recargar con ↺).
-- [ ] **Persistir `state.pdfScale` (UX)** — `fontSize`, `theme` y `noWrap` persisten en localStorage; el zoom de PDF no. Abrir un PDF siempre lo resetea a 100%. Guardar en `grungetab-pdfscale` y restaurarlo en `openPdf`.
-- [ ] **Búsqueda accent-insensitive (UX)** — `applySearch` hace `includes()` case-insensitive pero no normaliza diacríticos: buscar "cancion" no matchea "Canción". Usar `String.prototype.normalize('NFD').replace(/\p{Diacritic}/gu, '')` en ambos lados.
+- [x] **Persistir `state.pdfScale` (UX)** — `fontSize`, `theme` y `noWrap` persisten en localStorage; el zoom de PDF no. Abrir un PDF siempre lo resetea a 100%. Guardar en `grungetab-pdfscale` y restaurarlo en `openPdf`.
+- [x] **Búsqueda accent-insensitive (UX)** — `applySearch` hace `includes()` case-insensitive pero no normaliza diacríticos: buscar "cancion" no matchea "Canción". Usar `String.prototype.normalize('NFD').replace(/\p{Diacritic}/gu, '')` en ambos lados.
 
 ### Baja prioridad
 
@@ -146,8 +146,8 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **Cachear `loadPins()`/`loadRecents()` en memoria (perf)** — hoy se parsean desde localStorage en cada `renderItems`. Mantener una copia en `state` e invalidar en `togglePin`/`addRecent`.
 - [x] **Mover `doc_current` a `state` (calidad)** — variable module-level mutable (app.js:487), inconsistente con el resto del estado.
 - [x] **Búsqueda recursiva entre carpetas (UX)** — hoy el buscador solo filtra la carpeta actual.
-- [ ] **Race condition en `refreshToken()` (calidad)** — si dos `authFetch` reciben 401 en paralelo, ambos disparan `refreshToken()` y se inician dos flujos OAuth simultáneos (`app.js:802`). Compartir un `refreshPromise` mientras haya uno en curso.
-- [ ] **Limpieza del `.gitignore` (calidad)** — el `.gitignore` incluye `dev.sh`, pero `dev.sh` está tracked en el repo (y referenciado por `README.md` y `CLAUDE.md`). La línea no tiene efecto porque git no ignora archivos ya rastreados, pero es confuso. Removerla.
+- [x] **Race condition en `refreshToken()` (calidad)** — si dos `authFetch` reciben 401 en paralelo, ambos disparan `refreshToken()` y se inician dos flujos OAuth simultáneos (`app.js:802`). Compartir un `refreshPromise` mientras haya uno en curso.
+- [x] **Limpieza del `.gitignore` (calidad)** — el `.gitignore` incluye `dev.sh`, pero `dev.sh` está tracked en el repo (y referenciado por `README.md` y `CLAUDE.md`). La línea no tiene efecto porque git no ignora archivos ya rastreados, pero es confuso. Removerla.
 - [ ] **Toggle para `filter: invert(1)` en imágenes dark (UX)** — `style.css:368` invierte todas las imágenes en modo oscuro. Útil para tablaturas escaneadas b/n, pero destruye imágenes con color (diagramas de acordes coloreados, fotos). Agregar un toggle en ajustes o detectar imágenes ya oscuras.
 - [ ] **Saltar entre secciones del doc (UX)** — para canciones largas con coros/estrofas marcadas como `<h2>`/`<h3>`, un par de botones ⏮/⏭ (o atajos Home/End, PgUp/PgDn) que muevan a la siguiente heading ayudaría a no perder el lugar en vivo.
 - [ ] **Indicación visual de "Fin del documento" (UX)** — cuando el auto-scroll llega al final, `pause()` se ejecuta silenciosamente y el usuario solo ve que el scroll se detuvo. Un flash corto en el badge o un indicador pequeño aclararía que no es un freeze.
