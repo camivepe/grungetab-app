@@ -51,7 +51,10 @@ const state = {
   // Caché en memoria de localStorage (invalidar en savePins/saveRecents)
   pins:    [],
   recents: [],
+  setlist: [],
 };
+
+const SETLIST_MAX = 30;
 
 // ── Velocidades ───────────────────────────────────────────────────────────────
 const SPEED_LABELS = { 1: 'Lento', 2: 'Normal', 3: 'Rápido', 4: 'Muy rápido' };
@@ -102,6 +105,15 @@ const btnInvertImgs    = document.getElementById('btn-invert-imgs');
 const invertControl    = document.getElementById('invert-control');
 const btnPrevSection   = document.getElementById('btn-prev-section');
 const btnNextSection   = document.getElementById('btn-next-section');
+const btnInstall       = document.getElementById('btn-install');
+const btnSetlist       = document.getElementById('btn-setlist');
+const setlistBadge     = document.getElementById('setlist-badge');
+const setlistPanel     = document.getElementById('setlist-panel');
+const setlistItems     = document.getElementById('setlist-items');
+const btnSetlistClear  = document.getElementById('btn-setlist-clear');
+const btnSetlistClose  = document.getElementById('btn-setlist-close');
+const btnSetlistPrev   = document.getElementById('btn-setlist-prev');
+const btnSetlistNext   = document.getElementById('btn-setlist-next');
 
 // ── Navegación entre pantallas ────────────────────────────────────────────────
 function showScreen(name) {
@@ -137,9 +149,13 @@ function releaseWakeLock() {
 }
 
 // El navegador libera el wake lock al ocultar la pestaña; re-pedirlo al volver.
+// Además, al pasar a hidden guardamos la posición de scroll por si el usuario
+// cierra la pestaña o cambia de app (popstate no corre en esos casos).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !screenReader.classList.contains('hidden')) {
     requestWakeLock();
+  } else if (document.visibilityState === 'hidden' && state.currentFile) {
+    saveScrollPos(state.currentFile.id, container.scrollTop);
   }
 });
 
@@ -227,6 +243,107 @@ function removeRecent(id) {
   saveRecents(state.recents.filter(x => x.id !== id));
 }
 
+// ── Setlist (cola de práctica) ────────────────────────────────────────────────
+function loadSetlist() {
+  try { return JSON.parse(localStorage.getItem('grungetab-setlist') || '[]'); }
+  catch { return []; }
+}
+function saveSetlist(arr) {
+  state.setlist = arr;
+  localStorage.setItem('grungetab-setlist', JSON.stringify(arr));
+  updateSetlistBadge();
+}
+function toggleInSetlist(item) {
+  const arr = state.setlist.slice();
+  const idx = arr.findIndex(x => x.id === item.id);
+  if (idx >= 0) arr.splice(idx, 1);
+  else if (arr.length < SETLIST_MAX) arr.push(item);
+  saveSetlist(arr);
+}
+function clearSetlist() {
+  saveSetlist([]);
+}
+function currentSetlistIndex() {
+  if (!state.currentFile) return -1;
+  return state.setlist.findIndex(x => x.id === state.currentFile.id);
+}
+function setlistGoto(delta) {
+  const i = currentSetlistIndex();
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= state.setlist.length) return;
+  const next = state.setlist[j];
+  if (next.type === 'doc') openDoc(next.id, next.name);
+  else if (next.type === 'txt') openTxt(next.id, next.name);
+  else if (next.type === 'pdf') openPdf(next.id, next.name);
+}
+
+function updateSetlistBadge() {
+  const n = state.setlist.length;
+  if (!setlistBadge) return;
+  setlistBadge.textContent = String(n);
+  setlistBadge.classList.toggle('hidden', n === 0);
+}
+
+function renderSetlistPanel() {
+  if (!setlistItems) return;
+  if (state.setlist.length === 0) {
+    setlistItems.innerHTML = '<div class="setlist-empty">Setlist vacío. Agregá canciones con 🎼.</div>';
+    return;
+  }
+  const icons = { doc: '📄', txt: '🎸', pdf: '📕' };
+  setlistItems.innerHTML = state.setlist.map((it, i) => `
+    <div class="setlist-item" data-id="${it.id}" data-name="${escapeHtml(it.name)}" data-type="${it.type}">
+      <span class="setlist-num">${i + 1}</span>
+      <span class="doc-icon">${icons[it.type] || '📄'}</span>
+      <div class="doc-name">${escapeHtml(it.name)}</div>
+      <button class="setlist-up"  data-id="${it.id}" title="Subir">▲</button>
+      <button class="setlist-down" data-id="${it.id}" title="Bajar">▼</button>
+      <button class="setlist-remove" data-id="${it.id}" title="Quitar">✕</button>
+    </div>
+  `).join('');
+
+  setlistItems.querySelectorAll('.setlist-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      const { id, name, type } = el.dataset;
+      setlistPanel.classList.add('hidden');
+      if (type === 'doc') openDoc(id, name);
+      else if (type === 'txt') openTxt(id, name);
+      else if (type === 'pdf') openPdf(id, name);
+    });
+  });
+  setlistItems.querySelectorAll('.setlist-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      saveSetlist(state.setlist.filter(x => x.id !== btn.dataset.id));
+      renderSetlistPanel();
+      applySearch();
+    });
+  });
+  const move = (id, delta) => {
+    const arr = state.setlist.slice();
+    const i = arr.findIndex(x => x.id === id);
+    if (i < 0) return;
+    const j = i + delta;
+    if (j < 0 || j >= arr.length) return;
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    saveSetlist(arr);
+    renderSetlistPanel();
+  };
+  setlistItems.querySelectorAll('.setlist-up').forEach(btn =>
+    btn.addEventListener('click', (e) => { e.stopPropagation(); move(btn.dataset.id, -1); }));
+  setlistItems.querySelectorAll('.setlist-down').forEach(btn =>
+    btn.addEventListener('click', (e) => { e.stopPropagation(); move(btn.dataset.id, +1); }));
+}
+
+function refreshSetlistReaderNav() {
+  if (!btnSetlistPrev || !btnSetlistNext) return;
+  const i = currentSetlistIndex();
+  btnSetlistPrev.classList.toggle('hidden', i <= 0);
+  btnSetlistNext.classList.toggle('hidden', i < 0 || i >= state.setlist.length - 1);
+}
+
 // ── Auth: Google Identity Services ────────────────────────────────────────────
 window.onGoogleLogin = async function(response) {
   try {
@@ -278,25 +395,43 @@ function initOAuthClient(silent = false, loginHint = '') {
     loadFolder(CONFIG.tabsFolderId, 'GrungeTab');
   };
 
-  const config = {
-    client_id: CONFIG.clientId,
-    scope: SCOPES,
-    callback: onToken,
+  // Intenta silencioso primero (sin picker); si no hay consentimiento previo,
+  // reintenta con popup completo. Evita el doble selector de cuenta cuando el
+  // usuario ya eligió una en GIS y dió consentimiento antes.
+  const runSilent = () => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.clientId,
+      scope: SCOPES,
+      callback: onToken,
+      hint: loginHint || undefined,
+      prompt: '',
+      error_callback: () => {
+        if (silent) {
+          localStorage.removeItem('grungetab-authed');
+          showScreen('login');
+          return;
+        }
+        runInteractive();
+      },
+    });
+    client.requestAccessToken();
   };
-  if (silent) {
-    // prompt: '' = solicitar token sin popup si ya se otorgó consentimiento.
-    config.prompt = '';
-    config.error_callback = () => {
-      localStorage.removeItem('grungetab-authed');
-      showScreen('login');
-    };
-  } else if (loginHint) {
-    // Evitar el segundo selector de cuenta: el usuario ya eligió cuenta en GIS.
-    config.hint = loginHint;
-  }
 
-  const client = google.accounts.oauth2.initTokenClient(config);
-  client.requestAccessToken();
+  const runInteractive = () => {
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.clientId,
+      scope: SCOPES,
+      callback: onToken,
+      hint: loginHint || undefined,
+    });
+    client.requestAccessToken();
+  };
+
+  // silent=true (reanudar sesión): sólo probar silencioso, fallar a login.
+  // silent=false (login inicial con hint): probar silencioso, fallback a interactivo.
+  // silent=false (sin hint): directo a interactivo.
+  if (silent || loginHint) runSilent();
+  else runInteractive();
 }
 
 function logout() {
@@ -381,6 +516,9 @@ function pushReaderState(id) {
 // Libera el estado pesado del reader (JSON de Docs, PDFDocumentProxy con
 // sus workers) al salir. Se llama en las transiciones reader → list.
 function cleanupReaderState() {
+  if (state.currentFile) {
+    saveScrollPos(state.currentFile.id, container.scrollTop);
+  }
   if (state.pdfDoc) {
     try { state.pdfDoc.destroy(); } catch {}
     state.pdfDoc = null;
@@ -409,14 +547,21 @@ window.addEventListener('popstate', () => {
   }
 });
 
-function renderQuickAccess(pinIds) {
+function renderQuickAccess(pinIds, setIds) {
   if (searchInput.value.trim()) return '';
 
   const pins    = state.pins;
-  const recents = state.recents;
+  const recents = state.recents.filter(r => !pinIds.has(r.id));
   if (pins.length === 0 && recents.length === 0) return '';
 
   const icons = { doc: '📄', txt: '🎸', pdf: '📕', folder: '📁' };
+  const setlistBtnHtml = (item) => {
+    if (item.type === 'folder') return '';
+    const inSet = setIds.has(item.id);
+    return `<button class="btn-setlist-add${inSet ? ' added' : ''}"
+             data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${item.type}"
+             title="${inSet ? 'Quitar del setlist' : 'Agregar al setlist'}">${inSet ? '✓' : '🎼'}</button>`;
+  };
   const pinItemHtml = (item) => {
     const pinned = pinIds.has(item.id);
     return `
@@ -426,6 +571,7 @@ function renderQuickAccess(pinIds) {
            data-type="${item.type}">
         <span class="doc-icon">${icons[item.type] || '📄'}</span>
         <div class="doc-info"><div class="doc-name">${escapeHtml(item.name)}</div></div>
+        ${setlistBtnHtml(item)}
         <button class="btn-pin${pinned ? ' pinned' : ''}"
                 data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${item.type}"
                 title="${pinned ? 'Quitar pin' : 'Fijar'}">📌</button>
@@ -441,6 +587,7 @@ function renderQuickAccess(pinIds) {
            data-type="${item.type}">
         <span class="doc-icon">${icons[item.type] || '📄'}</span>
         <div class="doc-info"><div class="doc-name">${escapeHtml(item.name)}</div></div>
+        ${setlistBtnHtml(item)}
         <button class="btn-pin${pinned ? ' pinned' : ''}"
                 data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${item.type}"
                 title="${pinned ? 'Quitar pin' : 'Fijar'}">📌</button>
@@ -450,20 +597,35 @@ function renderQuickAccess(pinIds) {
       </div>`;
   };
 
+  const pinsCollapsed    = localStorage.getItem('grungetab-pins-collapsed')    === '1';
+  const recentsCollapsed = localStorage.getItem('grungetab-recents-collapsed') === '1';
+  const chev = (collapsed) => collapsed ? '▸' : '▾';
+
+  const section = (key, title, count, itemsHtml, collapsed) => `
+    <div class="quick-section${collapsed ? ' collapsed' : ''}" data-section="${key}">
+      <button class="quick-section-header" type="button" data-section="${key}">
+        <span class="quick-chev">${chev(collapsed)}</span>
+        <span>${title}</span>
+        <span class="quick-count">${count}</span>
+      </button>
+      <div class="quick-section-body">${itemsHtml}</div>
+    </div>`;
+
   let html = '';
   if (pins.length > 0) {
-    html += `<div class="quick-section"><div class="quick-section-header">Fijados</div>${pins.map(pinItemHtml).join('')}</div>`;
+    html += section('pins', 'Fijados', pins.length, pins.map(pinItemHtml).join(''), pinsCollapsed);
   }
   if (recents.length > 0) {
-    html += `<div class="quick-section"><div class="quick-section-header">Recientes</div>${recents.map(recentItemHtml).join('')}</div>`;
+    html += section('recents', 'Recientes', recents.length, recents.map(recentItemHtml).join(''), recentsCollapsed);
   }
   return html;
 }
 
 function renderItems(items) {
   const pinIds = new Set(state.pins.map(p => p.id));
+  const setIds = new Set(state.setlist.map(s => s.id));
 
-  let html = renderQuickAccess(pinIds);
+  let html = renderQuickAccess(pinIds, setIds);
 
   if (items.length === 0) {
     if (!html) {
@@ -485,6 +647,9 @@ function renderItems(items) {
       const pinBtn = `<button class="btn-pin${pinIds.has(item.id) ? ' pinned' : ''}"
                data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${type}"
                title="${pinIds.has(item.id) ? 'Quitar pin' : 'Fijar'}">📌</button>`;
+      const setBtn = isFolder ? '' : `<button class="btn-setlist-add${setIds.has(item.id) ? ' added' : ''}"
+               data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-type="${type}"
+               title="${setIds.has(item.id) ? 'Quitar del setlist' : 'Agregar al setlist'}">${setIds.has(item.id) ? '✓' : '🎼'}</button>`;
       return `
         <div class="doc-item${isFolder ? ' folder-item' : ''}"
              data-id="${item.id}"
@@ -495,12 +660,27 @@ function renderItems(items) {
             <div class="doc-name">${escapeHtml(item.name)}</div>
             ${meta}
           </div>
+          ${setBtn}
           ${pinBtn}
           <span class="doc-arrow">›</span>
         </div>`;
     }).join('');
     docList.innerHTML = html;
   }
+
+  docList.querySelectorAll('.quick-section-header').forEach(hdr => {
+    hdr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = hdr.dataset.section;
+      const storageKey = `grungetab-${key}-collapsed`;
+      const nowCollapsed = localStorage.getItem(storageKey) !== '1';
+      localStorage.setItem(storageKey, nowCollapsed ? '1' : '0');
+      const section = hdr.closest('.quick-section');
+      section.classList.toggle('collapsed', nowCollapsed);
+      const chev = hdr.querySelector('.quick-chev');
+      if (chev) chev.textContent = nowCollapsed ? '▸' : '▾';
+    });
+  });
 
   docList.querySelectorAll('.btn-remove-recent').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -516,6 +696,14 @@ function renderItems(items) {
       pinBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         togglePin({ id: pinBtn.dataset.id, name: pinBtn.dataset.name, type: pinBtn.dataset.type });
+        applySearch();
+      });
+    }
+    const setBtn = el.querySelector('.btn-setlist-add');
+    if (setBtn) {
+      setBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleInSetlist({ id: setBtn.dataset.id, name: setBtn.dataset.name, type: setBtn.dataset.type });
         applySearch();
       });
     }
@@ -650,6 +838,8 @@ async function openDoc(docId, docName) {
   showScreen('reader');
   container.scrollTop = 0;
   pause();
+  updateMediaSessionMetadata();
+  refreshSetlistReaderNav();
 
   try {
     const res = await authFetch(`https://docs.googleapis.com/v1/documents/${docId}`);
@@ -663,6 +853,7 @@ async function openDoc(docId, docName) {
     tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
     resolveAuthImages(tabContent);
     cacheDocImages(doc, docId).catch(() => {});
+    restoreScrollPos(docId);
   } catch (err) {
     const cached = await loadOffline('doc', docId);
     if (cached) {
@@ -671,6 +862,7 @@ async function openDoc(docId, docName) {
       tabContent.innerHTML = `<div class="doc-rendered">${renderGoogleDoc(doc)}</div>`;
       resolveOfflineImages(tabContent, docId);
       fileTypeBadge.textContent = 'DOC · OFFLINE';
+      restoreScrollPos(docId);
       return;
     }
     tabContent.innerHTML = `<div style="padding:16px;color:#e57373">Error cargando el documento.<br><small>${err.message}</small><br><button id="btn-retry-content" style="margin-top:12px;color:inherit">Reintentar</button></div>`;
@@ -689,6 +881,8 @@ async function openTxt(fileId, fileName) {
   showScreen('reader');
   container.scrollTop = 0;
   pause();
+  updateMediaSessionMetadata();
+  refreshSetlistReaderNav();
 
   try {
     const res = await authFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
@@ -696,12 +890,14 @@ async function openTxt(fileId, fileName) {
     saveOffline('txt', fileId, res);
     const text = await res.text();
     tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
+    restoreScrollPos(fileId);
   } catch (err) {
     const cached = await loadOffline('txt', fileId);
     if (cached) {
       const text = await cached.text();
       tabContent.innerHTML = `<pre class="txt-rendered">${escapeHtml(text)}</pre>`;
       fileTypeBadge.textContent = 'TXT · OFFLINE';
+      restoreScrollPos(fileId);
       return;
     }
     tabContent.innerHTML = `<div style="padding:16px;color:#e57373">Error cargando el archivo.<br><small>${err.message}</small><br><button id="btn-retry-content" style="margin-top:12px;color:inherit">Reintentar</button></div>`;
@@ -823,6 +1019,47 @@ function loadPdfScale() {
   return Number.isFinite(v) ? Math.max(0.5, Math.min(3.0, v)) : 1.0;
 }
 
+// ── Posición de scroll por archivo ────────────────────────────────────────────
+const SCROLLPOS_MAX = 50;
+const SCROLLPOS_TTL = 30 * 24 * 60 * 60 * 1000; // 30 días
+
+function saveScrollPos(fileId, pos) {
+  try {
+    const raw = localStorage.getItem('grungetab-scrollpos');
+    const map = raw ? JSON.parse(raw) : {};
+    if (pos > 0) {
+      map[fileId] = { pos, ts: Date.now() };
+    } else {
+      delete map[fileId];
+    }
+    const now = Date.now();
+    let entries = Object.entries(map).filter(([, v]) => now - v.ts < SCROLLPOS_TTL);
+    if (entries.length > SCROLLPOS_MAX) {
+      entries.sort((a, b) => b[1].ts - a[1].ts);
+      entries = entries.slice(0, SCROLLPOS_MAX);
+    }
+    localStorage.setItem('grungetab-scrollpos', JSON.stringify(Object.fromEntries(entries)));
+  } catch {}
+}
+
+function loadScrollPos(fileId) {
+  try {
+    const raw = localStorage.getItem('grungetab-scrollpos');
+    if (!raw) return 0;
+    const entry = JSON.parse(raw)[fileId];
+    if (!entry) return 0;
+    if (Date.now() - entry.ts > SCROLLPOS_TTL) return 0;
+    return entry.pos || 0;
+  } catch { return 0; }
+}
+
+// Restaura el scroll a la última posición guardada. Se llama tras render.
+// Umbral: si está cerca del inicio (<50px), quedarse en 0 para no ser molesto.
+function restoreScrollPos(fileId) {
+  const pos = loadScrollPos(fileId);
+  if (pos > 50) container.scrollTop = pos;
+}
+
 async function setPdfZoom(delta) {
   if (!state.pdfDoc) return;
   state.pdfScale = Math.max(0.5, Math.min(3.0, state.pdfScale + delta));
@@ -855,6 +1092,8 @@ async function openPdf(fileId, fileName) {
   container.scrollTop = 0;
   pause();
   setFileTypeControls('pdf');
+  updateMediaSessionMetadata();
+  refreshSetlistReaderNav();
   state.pdfScale = loadPdfScale();
   updateZoomLabel();
 
@@ -868,6 +1107,7 @@ async function openPdf(fileId, fileName) {
 
     state.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
     await renderPdfPages();
+    restoreScrollPos(fileId);
   } catch (err) {
     try {
       await loadPdfJs();
@@ -877,6 +1117,7 @@ async function openPdf(fileId, fileName) {
         state.pdfDoc = await pdfjsLib.getDocument({ data }).promise;
         await renderPdfPages();
         fileTypeBadge.textContent = 'PDF · OFFLINE';
+        restoreScrollPos(fileId);
         return;
       }
     } catch { /* PDF.js falló al cargar offline — cae al mensaje de error */ }
@@ -1145,6 +1386,9 @@ function play() {
   btnSettings.classList.remove('active');
   state.rafId = requestAnimationFrame(scrollStep);
   scheduleHide();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  primeMediaSessionAudio();
+  mediaSessionAudio?.play().catch(() => {});
 }
 
 function pause() {
@@ -1155,10 +1399,47 @@ function pause() {
   state.scrollAccum = 0;
   btnPlay.textContent = '▶ Reproducir';
   showControls();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+  mediaSessionAudio?.pause();
 }
 
 function togglePlay() {
   state.playing ? pause() : play();
+}
+
+// ── MediaSession: pedales BT y media keys ─────────────────────────────────────
+// Registra handlers para que play/pause del SO (pedales Bluetooth, airpods,
+// teclado con tecla multimedia) actúen sobre el reader. Requiere un <audio>
+// activo o metadata + playbackState para que el navegador tome los handlers.
+let mediaSessionAudio = null;
+
+function primeMediaSessionAudio() {
+  // iOS/Safari no activa MediaSession sin un elemento de audio reproduciendo.
+  // Usamos un audio silencioso que loopea — no se oye pero mantiene la sesión viva.
+  if (mediaSessionAudio) return;
+  const audio = document.createElement('audio');
+  audio.loop = true;
+  // WAV silencioso mínimo (1 frame PCM 8kHz mono)
+  audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  audio.preload = 'auto';
+  mediaSessionAudio = audio;
+}
+
+function setupMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  ms.setActionHandler('play',  () => { if (!state.playing) togglePlay(); });
+  ms.setActionHandler('pause', () => { if (state.playing)  togglePlay(); });
+  ms.setActionHandler('previoustrack', () => { jumpToSection(-1); });
+  ms.setActionHandler('nexttrack',     () => { jumpToSection(+1); });
+}
+
+function updateMediaSessionMetadata() {
+  if (!('mediaSession' in navigator) || !state.currentFile) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title:  state.currentFile.name,
+    artist: 'GrungeTab',
+  });
 }
 
 // ── Visibilidad de controles ──────────────────────────────────────────────────
@@ -1203,6 +1484,35 @@ btnInvertImgs?.addEventListener('click', (e) => {
   showControls();
   scheduleHide();
 });
+btnSetlist?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  renderSetlistPanel();
+  setlistPanel.classList.toggle('hidden');
+});
+document.addEventListener('click', (e) => {
+  if (!setlistPanel || setlistPanel.classList.contains('hidden')) return;
+  if (setlistPanel.contains(e.target) || btnSetlist?.contains(e.target)) return;
+  setlistPanel.classList.add('hidden');
+});
+btnSetlistClose?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setlistPanel.classList.add('hidden');
+});
+btnSetlistClear?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!confirm('¿Vaciar el setlist?')) return;
+  clearSetlist();
+  renderSetlistPanel();
+  applySearch();
+});
+btnSetlistPrev?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setlistGoto(-1);
+});
+btnSetlistNext?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setlistGoto(+1);
+});
 btnPrevSection?.addEventListener('click', (e) => {
   e.stopPropagation();
   jumpToSection(-1);
@@ -1224,7 +1534,13 @@ btnSettings.addEventListener('click',  (e) => {
 });
 
 container.addEventListener('click', () => {
-  if (controls.classList.contains('hidden')) {
+  // Durante playback un tap pausa directo (no exige dos taps cuando los
+  // controles están auto-ocultos). En pausa, el tap actúa sobre los controles.
+  if (state.playing) {
+    togglePlay();
+    showControls();
+    scheduleHide();
+  } else if (controls.classList.contains('hidden')) {
     showControls();
     scheduleHide();
   } else {
@@ -1314,12 +1630,16 @@ document.addEventListener('keydown', (e) => {
       break;
     case '+':
     case '=':
-      applyFontSize(Math.min(4, state.fontSize + 1));
+      e.preventDefault();
+      if (state.pdfDoc) setPdfZoom(+0.25);
+      else applyFontSize(Math.min(4, state.fontSize + 1));
       showControls();
       scheduleHide();
       break;
     case '-':
-      applyFontSize(Math.max(1, state.fontSize - 1));
+      e.preventDefault();
+      if (state.pdfDoc) setPdfZoom(-0.25);
+      else applyFontSize(Math.max(1, state.fontSize - 1));
       showControls();
       scheduleHide();
       break;
@@ -1355,6 +1675,26 @@ window.addEventListener('online',  syncOfflineIndicator);
 window.addEventListener('offline', syncOfflineIndicator);
 syncOfflineIndicator();
 
+// ── Instalación PWA ───────────────────────────────────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  btnInstall?.classList.remove('hidden');
+});
+btnInstall?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  btnInstall.classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  btnInstall?.classList.add('hidden');
+});
+
 // ── Toast de actualización del SW ─────────────────────────────────────────────
 function showSwUpdateToast() {
   if (document.getElementById('sw-update-toast')) return;
@@ -1382,6 +1722,9 @@ loadViewPrefs();
 speedLabel.textContent = SPEED_LABELS[state.speed];
 state.pins    = loadPins();
 state.recents = loadRecents();
+state.setlist = loadSetlist();
+updateSetlistBadge();
+setupMediaSession();
 
 if (localStorage.getItem('grungetab-authed') === '1') {
   // Hay una sesión previa: esperar a que cargue GIS e intentar token silencioso.

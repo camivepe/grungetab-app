@@ -137,6 +137,15 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **Badge `OFFLINE` queda stale al volver la red (UX)** — si abriste un archivo desde cache y luego recuperás conexión, el badge sigue diciendo `DOC · OFFLINE`. Volver a `DOC` cuando `navigator.onLine` pasa a true (o actualizar al recargar con ↺).
 - [x] **Persistir `state.pdfScale` (UX)** — `fontSize`, `theme` y `noWrap` persisten en localStorage; el zoom de PDF no. Abrir un PDF siempre lo resetea a 100%. Guardar en `grungetab-pdfscale` y restaurarlo en `openPdf`.
 - [x] **Búsqueda accent-insensitive (UX)** — `applySearch` hace `includes()` case-insensitive pero no normaliza diacríticos: buscar "cancion" no matchea "Canción". Usar `String.prototype.normalize('NFD').replace(/\p{Diacritic}/gu, '')` en ambos lados.
+- [x] **No repetir en recientes y fijados**: filtro en `renderQuickAccess` descarta items ya fijados.
+- [x] **Recordar posición de scroll por archivo (UX)** — al reabrir una tablatura vuelve a la posición donde la dejaste. `grungetab-scrollpos` con TTL 30 días y cap 50 archivos.
+- [x] **MediaSession API para pedales BT y media keys (UX)** — play/pause y next/prev responden a pedales Bluetooth, airpods, teclas multimedia del SO.
+- [x] **Count-in metrónomo — descartado**: se probó y se removió completamente (código, UI, estado y persistencia). **No volver a agregarlo.** Para contar los tiempos el usuario prefiere su propia cadencia — el count-in forzado antes del scroll no sumaba al caso de uso real.
+- [x] **Botón "Instalar app" (UX)** — captura `beforeinstallprompt`, muestra 📲 en el header de la lista.
+- [x] **Tap directo para pausar (UX)** — durante playback un tap pausa; antes requería dos.
+- [x] **Setlists / cola de práctica (UX)** — botón 🎼 en cada archivo, panel con reorden/quitar/vaciar, nav 🎵◀ 🎵▶ en el reader.
+- [x] **Hotkeys de zoom en PDF (UX)** — `+`/`-` zoomea el PDF cuando hay uno abierto.
+- [x] **Revisar nuevamente login** — `initOAuthClient` ahora intenta `prompt:''` con `hint` primero (sin picker si el consentimiento ya existe) y cae a interactivo si falla.
 
 ### Baja prioridad
 
@@ -153,3 +162,9 @@ Priorizado por impacto sobre el caso de uso real (tocar guitarra sin tocar la pa
 - [x] **Indicación visual de "Fin del documento" (UX)** — al llegar al final del scroll, `flashEndOfDoc()` dispara la animación CSS `badge-flash` sobre el badge del tipo de archivo antes de pausar.
 - [x] **Detectar home con el "Atrás"/"Escape"** Cuando ya esté en la raíz/home no hacer más atrás para que nos se salga de la aplicación
 - [x] **Quitar elementos de "Recientes" + límite a pins (UX)** — botón ✕ en cada item de Recientes; `removeRecent(id)` lo filtra del estado. `PINS_MAX = 20` en `togglePin` evita que Fijados crezca sin control.
+- [x] **Revisar lo de limpiar caché e invertir imágenes**: para qué sirven?
+  - `🧹 Limpiar caché offline` → borra los docs/txt/pdf que quedaron guardados para abrir sin internet. Útil si el espacio se acumula o algo quedó corrupto.
+  - `🖼 Invertir imágenes` → solo en modo oscuro, invierte los colores de las imágenes embebidas en Docs (útil cuando son capturas con fondo blanco que molesta).
+- [x] **Mejorar pin y recientes (acordeón) (UX)** — los headers "Fijados" y "Recientes" son botones ▾/▸ que colapsan/expanden la sección. El estado persiste por sección (`grungetab-pins-collapsed`, `grungetab-recents-collapsed`). El header muestra el count al costado.
+- [x] **Cómo funcionan los setlists**:
+  - Setlist: desde la lista, tocá 🎼 al lado de una canción para agregarla. Arriba en el header aparece 🎼N (N = cantidad) — clic abre el panel con reorden ▲▼, quitar ✕ y "🚮 Vaciar". En el reader, si la canción abierta está en el setlist, aparecen 🎵◀ 🎵▶ en la barra superior para saltar. 

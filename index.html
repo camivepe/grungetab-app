@@ -51,9 +51,20 @@
     <button id="btn-list-back" class="hidden" title="Volver">←</button>
     <span id="list-title">GrungeTab</span>
     <div id="list-header-buttons">
+      <button id="btn-setlist" title="Ver setlist">🎼<span id="setlist-badge" class="hidden">0</span></button>
+      <button id="btn-install" class="hidden" title="Instalar app">📲</button>
       <button id="btn-list-theme" title="Toggle tema">☀️</button>
       <button id="btn-logout" title="Cerrar sesión">⏏</button>
     </div>
+  </div>
+
+  <div id="setlist-panel" class="hidden">
+    <div id="setlist-panel-header">
+      <span>Setlist</span>
+      <button id="btn-setlist-clear" title="Vaciar setlist">🚮 Vaciar</button>
+      <button id="btn-setlist-close" title="Cerrar">✕</button>
+    </div>
+    <div id="setlist-items"></div>
   </div>
 
   <div id="search-wrapper">
@@ -83,6 +94,8 @@
       <span id="file-type-badge"></span>
       <div id="top-buttons">
         <button id="btn-reload" title="Recargar documento">↺</button>
+        <button id="btn-setlist-prev" class="hidden" title="Anterior en setlist">🎵◀</button>
+        <button id="btn-setlist-next" class="hidden" title="Siguiente en setlist">🎵▶</button>
         <button id="btn-prev-section" class="hidden" title="Sección anterior">⏮</button>
         <button id="btn-next-section" class="hidden" title="Siguiente sección">⏭</button>
         <button id="btn-wrap" title="Ajuste de línea">↵</button>
