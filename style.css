@@ -713,6 +713,21 @@ button:hover, button:active {
   opacity: 0.7;
 }
 
+/* ── DELAY CONTROL ── */
+#delay-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#delay-label {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: center;
+  opacity: 0.7;
+}
+
 /* ── VIEW OPTIONS ── */
 #view-options {
   display: flex;
@@ -954,6 +969,7 @@ button:hover, button:active {
   }
 
   #speed-control,
+  #delay-control,
   #view-options,
   #zoom-control {
     flex: 0 0 auto;

@@ -23,6 +23,8 @@ const state = {
   // Lector
   playing: false,
   speed: 2,
+  startDelay: 1,        // segundos antes de empezar a hacer scroll
+  delayIntervalId: null,
   theme: 'dark',
   hideTimer: null,
   rafId: null,
@@ -58,10 +60,22 @@ const SETLIST_MAX = 30;
 
 // ── Velocidades ───────────────────────────────────────────────────────────────
 const SPEED_LABELS = { 1: 'Lento', 2: 'Normal', 3: 'Rápido', 4: 'Muy rápido' };
-const SPEEDS       = { 1: 5, 2: 13, 3: 24, 4: 48 };
+const SPEEDS       = { 1: 3, 2: 8, 3: 14, 4: 29 };
 
 function pxPerSecond(level) {
-  return SPEEDS[level] ?? 13;
+  return SPEEDS[level] ?? 8;
+}
+
+// ── Delay de arranque ─────────────────────────────────────────────────────────
+const START_DELAYS = [1, 2, 3, 5];
+
+function loadStartDelay() {
+  const raw = parseInt(localStorage.getItem('grungetab-startdelay'), 10);
+  return START_DELAYS.includes(raw) ? raw : 1;
+}
+
+function saveStartDelay(s) {
+  try { localStorage.setItem('grungetab-startdelay', String(s)); } catch {}
 }
 
 // ── Referencias DOM ───────────────────────────────────────────────────────────
@@ -93,6 +107,9 @@ const btnSettings    = document.getElementById('btn-settings');
 const settingsPanel  = document.getElementById('settings-panel');
 const btnSpeedDown   = document.getElementById('btn-speed-down');
 const btnSpeedUp     = document.getElementById('btn-speed-up');
+const delayLabel     = document.getElementById('delay-label');
+const btnDelayDown   = document.getElementById('btn-delay-down');
+const btnDelayUp     = document.getElementById('btn-delay-up');
 const btnFontDown    = document.getElementById('btn-font-down');
 const btnFontUp      = document.getElementById('btn-font-up');
 const zoomControl    = document.getElementById('zoom-control');
@@ -1378,23 +1395,48 @@ function changeSpeed(delta) {
   scheduleHide();
 }
 
+function changeDelay(delta) {
+  const idx = START_DELAYS.indexOf(state.startDelay);
+  const nextIdx = Math.max(0, Math.min(START_DELAYS.length - 1, idx + delta));
+  state.startDelay = START_DELAYS[nextIdx];
+  delayLabel.textContent = `${state.startDelay}s`;
+  saveStartDelay(state.startDelay);
+  showControls();
+  scheduleHide();
+}
+
 function play() {
   state.playing = true;
   state.lastTimestamp = null;
-  btnPlay.textContent = '⏸ Pausar';
   settingsPanel.classList.add('hidden');
   btnSettings.classList.remove('active');
-  state.rafId = requestAnimationFrame(scrollStep);
   scheduleHide();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
   primeMediaSessionAudio();
   mediaSessionAudio?.play().catch(() => {});
+
+  let remaining = state.startDelay;
+  btnPlay.textContent = `⏱ ${remaining}`;
+  state.delayIntervalId = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      btnPlay.textContent = `⏱ ${remaining}`;
+    } else {
+      clearInterval(state.delayIntervalId);
+      state.delayIntervalId = null;
+      btnPlay.textContent = '⏸ Pausar';
+      state.lastTimestamp = null;
+      state.rafId = requestAnimationFrame(scrollStep);
+    }
+  }, 1000);
 }
 
 function pause() {
   state.playing = false;
   if (state.rafId) cancelAnimationFrame(state.rafId);
   state.rafId = null;
+  if (state.delayIntervalId) clearInterval(state.delayIntervalId);
+  state.delayIntervalId = null;
   state.lastTimestamp = null;
   state.scrollAccum = 0;
   btnPlay.textContent = '▶ Reproducir';
@@ -1469,6 +1511,8 @@ btnZoomIn.addEventListener('click',    (e) => { e.stopPropagation(); setPdfZoom(
 btnZoomOut.addEventListener('click',   (e) => { e.stopPropagation(); setPdfZoom(-0.25); showControls(); scheduleHide(); });
 btnSpeedDown.addEventListener('click', (e) => { e.stopPropagation(); changeSpeed(-1); });
 btnSpeedUp.addEventListener('click',   (e) => { e.stopPropagation(); changeSpeed(+1); });
+btnDelayDown.addEventListener('click', (e) => { e.stopPropagation(); changeDelay(-1); });
+btnDelayUp.addEventListener('click',   (e) => { e.stopPropagation(); changeDelay(+1); });
 btnFontDown.addEventListener('click',  (e) => { e.stopPropagation(); applyFontSize(Math.max(1, state.fontSize - 1)); showControls(); scheduleHide(); });
 btnFontUp.addEventListener('click',    (e) => { e.stopPropagation(); applyFontSize(Math.min(4, state.fontSize + 1)); showControls(); scheduleHide(); });
 btnClearCache?.addEventListener('click', async (e) => {
@@ -1720,6 +1764,8 @@ if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
 loadTheme();
 loadViewPrefs();
 speedLabel.textContent = SPEED_LABELS[state.speed];
+state.startDelay = loadStartDelay();
+delayLabel.textContent = `${state.startDelay}s`;
 state.pins    = loadPins();
 state.recents = loadRecents();
 state.setlist = loadSetlist();
