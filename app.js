@@ -58,10 +58,10 @@ const SETLIST_MAX = 30;
 
 // ── Velocidades ───────────────────────────────────────────────────────────────
 const SPEED_LABELS = { 1: 'Lento', 2: 'Normal', 3: 'Rápido', 4: 'Muy rápido' };
-const SPEEDS       = { 1: 8, 2: 22, 3: 40, 4: 80 };
+const SPEEDS       = { 1: 5, 2: 13, 3: 24, 4: 48 };
 
 function pxPerSecond(level) {
-  return SPEEDS[level] ?? 22;
+  return SPEEDS[level] ?? 13;
 }
 
 // ── Referencias DOM ───────────────────────────────────────────────────────────
