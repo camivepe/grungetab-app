@@ -810,10 +810,17 @@ function renderParagraph(para) {
     }
   }
   // Saltos de línea suaves (Shift+Enter en Google Docs) → <br> explícito.
+  // La API los devuelve como \u000B (tabulador vertical) DENTRO del textRun, no
+  // como \n; el navegador no los trata como salto de línea, así que sin esto
+  // todas las líneas del párrafo se pegan en una sola.
   // El último textRun de cada párrafo termina con \n; lo eliminamos antes de
   // cerrar el <p> para evitar una línea vacía extra al pie de cada párrafo.
-  line = line.replace(/\n/g, '<br>');
+  line = line.replace(/[\n\u000B]/g, '<br>');
   line = line.replace(/<br>\s*$/, '');
+
+  // Un párrafo vacío es una línea en blanco en el doc, pero <p></p> tiene altura
+  // cero por el reset global (margin: 0), así que hay que darle un salto propio.
+  if (!line) line = '<br>';
 
   const style = para.paragraphStyle?.namedStyleType || '';
   if (style.startsWith('HEADING')) {
