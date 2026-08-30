@@ -67,7 +67,7 @@ function pxPerSecond(level) {
 }
 
 // ── Delay de arranque ─────────────────────────────────────────────────────────
-const START_DELAYS = [1, 2, 3, 5];
+const START_DELAYS = [1, 2, 3, 5, 8, 10];
 
 function loadStartDelay() {
   const raw = parseInt(localStorage.getItem('grungetab-startdelay'), 10);
